@@ -6,14 +6,19 @@ import (
 	"io"
 )
 
-type Ring[T any] struct {
+var (
+	ErrRingFull  = errors.New("Ring buffer full")
+	ErrRingEmpty = errors.New("Ring buffer empty")
+)
+
+type Ring[T comparable] struct {
 	buf          []T
 	size         uint
 	imask, lmask uint
 	start, end   uint
 }
 
-func NewRing[T any](size uint) (r *Ring[T]) {
+func NewRing[T comparable](size uint) (r *Ring[T]) {
 	if size&(size-1) != 0 || size == 0 {
 		size = 0x1000
 	}
@@ -98,7 +103,7 @@ func (r *Ring[T]) WriteFunc(
 	return n + hold, err
 }
 
-func (r *Ring[byte]) Write(p []byte) (n int, err error) {
+func (r *Ring[T]) Write(p []byte) (n int, err error) {
 	w := func(dest []byte, arg any) (n int, err error) {
 		src := arg.(*[]byte)
 
@@ -110,7 +115,7 @@ func (r *Ring[byte]) Write(p []byte) (n int, err error) {
 		}
 
 		if n == 0 {
-			err = errors.New("Buffer full")
+			err = ErrRingFull
 			return
 		}
 
@@ -121,21 +126,100 @@ func (r *Ring[byte]) Write(p []byte) (n int, err error) {
 	}
 
 	q := p
-	n, err = r.WriteFunc(w, &q)
+	n, err = any(r).(*Ring[byte]).WriteFunc(w, &q)
 	return
 }
 
-func (r *Ring[byte]) Read(p []byte) (n int, err error) {
+func (r *Ring[T]) WriteTo(w io.Writer) (n int64, err error) {
+	if r.Empty() {
+		err = ErrRingEmpty
+		return
+	}
+
+	br := any(r).(*Ring[byte])
+
+	from, to, wrap := r.start&r.imask, r.end&r.imask, false
+	if to <= from {
+		to = r.size
+		wrap = true
+	}
+
+	var m int
+	m, err = w.Write(br.buf[from:to])
+	r.start = (r.start + uint(m)) & r.lmask
+	if err != nil || !wrap {
+		return
+	}
+
+	hold, to := m, r.end&r.imask
+	m, err = w.Write(br.buf[:to])
+	r.start = (r.start + uint(m)) & r.lmask
+
+	return int64(m + hold), err
+}
+
+func (r *Ring[T]) Read(p []byte) (n int, err error) {
 	if r.Empty() {
 		err = io.EOF
 		return
 	}
 
+	br := any(r).(*Ring[byte])
+
 	for ; n < len(p); n++ {
-		if !r.Pop(&p[n]) {
+		if !br.Pop(&p[n]) {
 			return
 		}
 	}
 
 	return
+}
+
+func (r *Ring[T]) ReadFrom(src io.Reader) (n int64, err error) {
+	if r.Full() {
+		err = ErrRingFull
+		return
+	}
+
+	br := any(r).(*Ring[byte])
+
+	from, to, wrap := r.end&r.imask, r.start&r.imask, false
+	if to <= from {
+		to = r.size
+		wrap = true
+	}
+
+	var m int
+	m, err = src.Read(br.buf[from:to])
+	r.end = (r.end + uint(m)) & r.lmask
+	if err != nil || !wrap {
+		return
+	}
+
+	hold, to := m, r.start&r.imask
+	m, err = src.Read(br.buf[:to])
+	r.end = (r.end + uint(m)) & r.lmask
+
+	return int64(m + hold), err
+}
+
+func (r *Ring[T]) HasSuffix(s []T) bool {
+	var n int
+	if n = len(s); n == 0 {
+		return true
+	}
+	if r.Empty() || r.Size() != uint(n) {
+		return false
+	}
+
+	end := r.end & r.imask
+	start := (end - uint(n)) & r.imask
+
+	for i, t := range s {
+		if t != r.buf[(start+uint(i))&r.imask] {
+			return false
+		}
+	}
+
+	return true
 }

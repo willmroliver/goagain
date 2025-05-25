@@ -3,6 +3,7 @@ package container_test
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"strings"
@@ -305,6 +306,20 @@ func TestWrite(t *testing.T) {
 	}
 }
 
+func TestWriteTo(t *testing.T) {
+	r, s := container.NewRing[byte](0x10), container.NewRing[byte](0x10)
+	data := []byte("12345678")
+
+	r.Write(data)
+	r.Write(data)
+
+	io.Copy(s, r)
+
+	if !r.Empty() || !s.Full() {
+		t.Errorf("exp r empty, s full\n")
+	}
+}
+
 func TestRead(t *testing.T) {
 	r := container.NewRing[byte](0x10)
 	buf := bufio.NewReader(r)
@@ -323,5 +338,74 @@ func TestRead(t *testing.T) {
 	if exp := strings.Repeat(string(data), 2); res != exp {
 		t.Errorf("exp %s, got %s\n", exp, res)
 		return
+	}
+}
+
+type hideWriteTo struct {
+	io.Reader
+}
+
+func TestReadFrom(t *testing.T) {
+	r, s := container.NewRing[byte](0x10), container.NewRing[byte](0x10)
+	data := []byte("123456789")
+
+	reader := hideWriteTo{r}
+
+	for range 4 {
+		r.Write(data)
+		io.Copy(s, reader)
+		s.Read(data)
+
+		if exp := "123456789"; string(data) != exp {
+			t.Errorf("exp %s, got %s\n", exp, string(data))
+			return
+		}
+	}
+}
+
+func TestHasSuffix(t *testing.T) {
+	n := 0x10
+
+	type Test struct {
+		offset         int
+		suffix, search string
+	}
+
+	tests := []*Test{
+		{0, "1234", "1234"},
+		{n - 4, "1234", "1234"},
+		{n - 2, "1234", "1234"},
+		{n - 1, "1234", "1234"},
+		{n, "1234", "1234"},
+		{2*n - 2, "1234", "1234"},
+		{0, "1234", "12"},
+		{n - 4, "1234", "34"},
+		{n - 2, "1234", "123456"},
+		{n - 1, "1234", "123"},
+		{n, "1234", "234"},
+		{2*n - 2, "1234", "34"},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			r := container.NewRing[byte](uint(n))
+			var b byte = 0
+			exp := test.suffix == test.search
+
+			for range test.offset {
+				r.Push(0)
+				r.Pop(&b)
+			}
+
+			r.Write([]byte(test.suffix))
+
+			if got := r.HasSuffix([]byte(test.search)); exp != got {
+				t.Errorf(
+					"suffix: %s, search: %s, exp: %t, got: %t\n",
+					test.suffix, test.search, exp, got,
+				)
+				return
+			}
+		})
 	}
 }
