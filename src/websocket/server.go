@@ -1,9 +1,14 @@
 package websocket
 
 import (
+	"context"
 	"net"
 	"time"
+
+	"github.com/willmroliver/goagain/src/container"
 )
+
+var inc uint = 0
 
 type ServerConfig struct {
 	Path       string
@@ -16,11 +21,14 @@ type Server struct {
 	Listener  *net.TCPListener
 	KeepAlive net.KeepAliveConfig
 	Conf      ServerConfig
-	Cxns      []*Cxn
+	Cxns      map[uint]*Cxn
 }
 
 func NewServer(port int) (s *Server, err error) {
-	s = &Server{Port: port}
+	s = &Server{
+		Port: port,
+		Cxns: make(map[uint]*Cxn),
+	}
 
 	s.Listener, err = net.ListenTCP("tcp", &net.TCPAddr{
 		IP:   net.IPv6unspecified,
@@ -29,26 +37,37 @@ func NewServer(port int) (s *Server, err error) {
 	})
 
 	s.KeepAlive.Enable = true
-
 	return
 }
 
-func (s *Server) Run() {
-	for {
-		conn, err := s.Listener.AcceptTCP()
-		if err != nil {
-			// @todo - handle error
-			continue
-		}
+func (s *Server) Run(ctx *context.Context, cancel *context.CancelFunc) {
+	*ctx, *cancel = context.WithCancel(context.Background())
 
-		s.handleConn(conn)
+	for {
+		select {
+		case <-(*ctx).Done():
+			return
+		default:
+			conn, err := s.Listener.AcceptTCP()
+			if err != nil {
+				// @todo - handle error
+				continue
+			}
+
+			go s.NewCxn(conn).Talk(ctx)
+		}
 	}
 }
 
-func (s *Server) handleConn(c *net.TCPConn) {
-	cxn := NewCxn(s, c)
+func (s *Server) NewCxn(c *net.TCPConn) (cxn *Cxn) {
+	inc++
+	cxn = &Cxn{
+		TCPConn: c,
+		CxnID:   inc,
+		Server:  s,
+		Buf:     container.NewRing[byte](0x1000),
+	}
 	cxn.SetKeepAliveConfig(s.KeepAlive)
-	s.Cxns = append(s.Cxns, cxn)
-
-	go cxn.Talk()
+	s.Cxns[inc] = cxn
+	return
 }

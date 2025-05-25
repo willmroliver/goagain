@@ -34,20 +34,27 @@ func (m *MessageHTTP) Receive(c *Cxn) error {
 	m.Headers = make(map[string]string)
 	m.HeaderParsed = false
 
-	for !c.buf.HasSuffix([]byte(DelimHTTP)) {
-		if c.buf.Full() {
+	for !c.Buf.HasSuffix([]byte(DelimHTTP)) {
+		if c.Buf.Full() {
 			return ErrBadHeader
 		}
 
-		io.Copy(c.buf, c)
+		io.Copy(c.Buf, c)
 	}
 
 	b := &strings.Builder{}
-	io.Copy(b, c.buf)
+	io.Copy(b, c.Buf)
 
 	for line := range strings.SplitSeq(b.String(), CRLF) {
-		if m.Method == "" && !m.parseRequestLine(line) {
-			return ErrBadHeader
+		if m.Method == "" {
+			if !m.parseRequestLine(line) {
+				return ErrBadHeader
+			}
+			continue
+		}
+
+		if line == "" {
+			continue
 		}
 
 		i := strings.IndexByte(line, ':')
@@ -55,7 +62,7 @@ func (m *MessageHTTP) Receive(c *Cxn) error {
 			return ErrBadHeader
 		}
 
-		m.Headers[line[:i]] = line[i+1:]
+		m.Headers[line[:i]] = line[i+2:]
 	}
 
 	return nil
@@ -70,7 +77,9 @@ func (m *MessageHTTP) Send(c *Cxn) error {
 
 	data += CRLF
 
-	return nil
+	_, err := c.Write([]byte(data))
+
+	return err
 }
 
 func (m *MessageHTTP) parseRequestLine(s string) bool {

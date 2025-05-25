@@ -207,7 +207,7 @@ func (r *Ring[T]) HasSuffix(s []T) bool {
 	if n = len(s); n == 0 {
 		return true
 	}
-	if r.Empty() || r.Size() != uint(n) {
+	if r.Empty() || r.Size() < uint(n) {
 		return false
 	}
 

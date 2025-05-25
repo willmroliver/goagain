@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"errors"
@@ -17,19 +18,17 @@ var ErrBadHandshake = errors.New("bad handshake")
 
 type Cxn struct {
 	*net.TCPConn
-	server *Server
-	buf    *container.Ring[byte]
+	CxnID  uint
+	Server *Server
+	Buf    *container.Ring[byte]
 }
 
-func NewCxn(s *Server, c *net.TCPConn) *Cxn {
-	return &Cxn{
-		c,
-		s,
-		container.NewRing[byte](s.Conf.CxnBufSize),
-	}
+func (c *Cxn) Close() error {
+	delete(c.Server.Cxns, c.CxnID)
+	return c.TCPConn.Close()
 }
 
-func (c *Cxn) Talk() {
+func (c *Cxn) Talk(ctx *context.Context) {
 	if err := c.Handshake(); err != nil {
 		return
 	}
@@ -44,11 +43,11 @@ func (c *Cxn) Handshake() (err error) {
 
 	valid := h.Method == "GET" &&
 		h.Protocol == "HTTP/1.1" &&
-		h.URI != c.server.Conf.Path &&
+		(c.Server.Conf.Path == "" || h.URI != c.Server.Conf.Path) &&
 		h.Headers["Upgrade"] == "websocket" &&
 		h.Headers["Connection"] == "Upgrade" &&
-		h.Headers["Sec-Websocket-Version"] == "13" &&
-		len(h.Headers["Sec-Websocket-Key"]) == 24
+		h.Headers["Sec-WebSocket-Version"] == "13" &&
+		len(h.Headers["Sec-WebSocket-Key"]) == 24
 
 	if !valid {
 		err = ErrBadHandshake

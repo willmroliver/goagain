@@ -267,7 +267,6 @@ func TestWriteFunc(t *testing.T) {
 		}
 
 		if f, e, m := r.Full(), r.Empty(), r.Size(); !f || e || m != n {
-			t.Log(r.Debug())
 			t.Errorf(
 				"exp %t, %t, %d, got %t, %t, %d",
 				true, false, n, f, e, m,
@@ -389,8 +388,9 @@ func TestHasSuffix(t *testing.T) {
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			r := container.NewRing[byte](uint(n))
-			var b byte = 0
-			exp := test.suffix == test.search
+			b, n := byte(0), len(test.search)
+			exp := len(test.suffix) >= n &&
+				test.suffix[len(test.suffix)-n:] == test.search
 
 			for range test.offset {
 				r.Push(0)
