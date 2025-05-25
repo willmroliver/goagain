@@ -2,13 +2,12 @@ package container
 
 import (
 	"errors"
-	"fmt"
 	"io"
 )
 
 var (
-	ErrRingFull  = errors.New("Ring buffer full")
-	ErrRingEmpty = errors.New("Ring buffer empty")
+	ErrRingFull  = errors.New("ring full")
+	ErrRingEmpty = errors.New("ring empty")
 )
 
 type Ring[T comparable] struct {
@@ -71,8 +70,8 @@ func (r *Ring[T]) Pop(val *T) bool {
 	return true
 }
 
-func (r *Ring[T]) Debug() string {
-	return fmt.Sprintf("%+v\n", r)
+func (r *Ring[T]) Reset() {
+	r.start, r.end = 0, 0
 }
 
 // WriteFunc partially exposes the underlying memory to a callback
