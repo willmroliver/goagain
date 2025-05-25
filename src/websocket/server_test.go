@@ -3,6 +3,7 @@ package websocket_test
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,17 +31,27 @@ func TestServerRun(t *testing.T) {
 		return
 	}
 
-	msg := "GET /chat HTTP/1.1" + websocket.CRLF +
-		"Host: example.com" + websocket.CRLF +
-		"Upgrade: websocket" + websocket.CRLF +
-		"Connection: Upgrade" + websocket.CRLF +
-		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" + websocket.CRLF +
-		"Origin: http://example.com" + websocket.CRLF +
-		"Sec-WebSocket-Protocol: chat, superchat" + websocket.CRLF +
-		"Sec-WebSocket-Version: 13" + websocket.CRLF +
-		websocket.CRLF
+	var b strings.Builder
 
-	conn.Write([]byte(msg))
+	b.WriteString("GET /chat HTTP/1.1")
+	b.WriteString(websocket.CRLF)
+	b.WriteString("Host: example.com")
+	b.WriteString(websocket.CRLF)
+	b.WriteString("Upgrade: websocket")
+	b.WriteString(websocket.CRLF)
+	b.WriteString("Connection: Upgrade")
+	b.WriteString(websocket.CRLF)
+	b.WriteString("Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==")
+	b.WriteString(websocket.CRLF)
+	b.WriteString("Origin: http://example.com")
+	b.WriteString(websocket.CRLF)
+	b.WriteString("Sec-WebSocket-Protocol: chat, superchat")
+	b.WriteString(websocket.CRLF)
+	b.WriteString("Sec-WebSocket-Version: 13")
+	b.WriteString(websocket.CRLF)
+	b.WriteString(websocket.CRLF)
+
+	conn.Write([]byte(b.String()))
 
 	buf := make([]byte, 0x100)
 	n, err := conn.Read(buf)
