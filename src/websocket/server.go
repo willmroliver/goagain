@@ -40,16 +40,17 @@ func NewServer(port int) (s *Server, err error) {
 	return
 }
 
-func (s *Server) Run(ctx *context.Context, cancel *context.CancelFunc) {
-	*ctx, *cancel = context.WithCancel(context.Background())
-
+func (s *Server) Run(ctx context.Context) {
 	for {
 		select {
-		case <-(*ctx).Done():
+		case <-ctx.Done():
 			return
 		default:
 			conn, err := s.Listener.AcceptTCP()
 			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
 				// @todo - handle error
 				continue
 			}

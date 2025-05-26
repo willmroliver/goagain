@@ -28,7 +28,7 @@ func (c *Cxn) Close() error {
 	return c.TCPConn.Close()
 }
 
-func (c *Cxn) Talk(ctx *context.Context) {
+func (c *Cxn) Talk(ctx context.Context) {
 	if err := c.Handshake(); err != nil {
 		return
 	}

@@ -3,7 +3,6 @@ package websocket_test
 import (
 	"context"
 	"net"
-	"strings"
 	"testing"
 	"time"
 
@@ -18,47 +17,53 @@ func TestServerRun(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(&ctx, &cancel)
+	go s.Run(ctx)
+
+	defer cancel()
 
 	conn, err := net.Dial("tcp", ":9999")
 	if err != nil {
-		t.Errorf("exp nil, got %q\n", err)
+		t.Errorf("Dial: exp nil, got %q\n", err)
 		return
 	}
 	time.Sleep(time.Millisecond)
 	if exp, got := 1, len(s.Cxns); exp != got {
-		t.Errorf("exp %d, got %d\n", exp, got)
+		t.Errorf("len(Cxns): exp %d, got %d\n", exp, got)
 		return
 	}
 
-	var b strings.Builder
+	msg := "GET /chat HTTP/1.1\r\n" +
+		"Host: example.com\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+		"Origin: http://example.com\r\n" +
+		"Sec-WebSocket-Protocol: chat, superchat\r\n" +
+		"Sec-WebSocket-Version: 13\r\n" +
+		"\r\n"
 
-	b.WriteString("GET /chat HTTP/1.1")
-	b.WriteString(websocket.CRLF)
-	b.WriteString("Host: example.com")
-	b.WriteString(websocket.CRLF)
-	b.WriteString("Upgrade: websocket")
-	b.WriteString(websocket.CRLF)
-	b.WriteString("Connection: Upgrade")
-	b.WriteString(websocket.CRLF)
-	b.WriteString("Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==")
-	b.WriteString(websocket.CRLF)
-	b.WriteString("Origin: http://example.com")
-	b.WriteString(websocket.CRLF)
-	b.WriteString("Sec-WebSocket-Protocol: chat, superchat")
-	b.WriteString(websocket.CRLF)
-	b.WriteString("Sec-WebSocket-Version: 13")
-	b.WriteString(websocket.CRLF)
-	b.WriteString(websocket.CRLF)
-
-	conn.Write([]byte(b.String()))
+	conn.Write([]byte(msg))
 
 	buf := make([]byte, 0x100)
 	n, err := conn.Read(buf)
 	if exp := error(nil); err != exp || n == 0 {
-		t.Errorf("exp (%q, >0), got (%q, %d)\n", exp, err, n)
+		t.Errorf("Read err: exp %v, got %v\n", exp, err)
 		return
 	}
 
-	cancel()
+	exp := "HTTP/1.1 101 Switching Protocols\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-Websocket-Accept: Kfh9QIsMVZcl6xEPYxPHzW8SZ8w=\r\n" +
+		"\r\n"
+
+	if m := len(exp); n != m {
+		t.Errorf("Read n: exp %d, got %d\n", m, n)
+		return
+	}
+
+	if s := string(buf[:n]); s != exp {
+		t.Errorf("exp \n%q\ngot\n%q\n", exp, s)
+		return
+	}
 }

@@ -68,18 +68,19 @@ func (m *MessageHTTP) Receive(c *Cxn) error {
 	return nil
 }
 
-func (m *MessageHTTP) Send(c *Cxn) error {
-	data := m.Protocol + " " + m.StatusLine + CRLF
+func (m *MessageHTTP) Send(c *Cxn) (err error) {
+	var b strings.Builder
+
+	b.WriteString(m.Protocol + " " + m.StatusLine + CRLF)
 
 	for k, v := range m.Headers {
-		data += k + ": " + v + CRLF
+		b.WriteString(k + ": " + v + CRLF)
 	}
 
-	data += CRLF
+	b.WriteString(CRLF)
 
-	_, err := c.Write([]byte(data))
-
-	return err
+	_, err = c.Write([]byte(b.String()))
+	return
 }
 
 func (m *MessageHTTP) parseRequestLine(s string) bool {
