@@ -1,22 +1,19 @@
-package websocket
+package ws
 
 import (
 	"context"
 	"crypto/sha1"
 	"encoding/base64"
-	"errors"
 	"net"
 
-	"github.com/willmroliver/goagain/src/container"
+	"github.com/willmroliver/goagain/container"
 )
 
 const (
 	ProtocolGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 )
 
-var ErrBadHandshake = errors.New("bad handshake")
-
-type Cxn struct {
+type CxnWS struct {
 	*net.TCPConn
 	CxnID  uint
 	Server *Server

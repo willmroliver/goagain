@@ -70,7 +70,7 @@ func (r *Ring[T]) Pop(val *T) bool {
 	return true
 }
 
-func (r *Ring[T]) Reset() {
+func (r *Ring[T]) Clear() {
 	r.start, r.end = 0, 0
 }
 
@@ -203,8 +203,8 @@ func (r *Ring[T]) ReadFrom(src io.Reader) (n int64, err error) {
 }
 
 func (r *Ring[T]) HasSuffix(s []T) bool {
-	var n int
-	if n = len(s); n == 0 {
+	n := len(s)
+	if n == 0 {
 		return true
 	}
 	if r.Empty() || r.Size() < uint(n) {
@@ -221,4 +221,31 @@ func (r *Ring[T]) HasSuffix(s []T) bool {
 	}
 
 	return true
+}
+
+func (r *Ring[T]) IndexOf(s []T) int {
+	n := len(s)
+	if n == 0 {
+		if r.Empty() {
+			return 0
+		}
+		return -1
+	}
+	if r.Size() < uint(n) {
+		return -1
+	}
+
+	var i int
+
+	for from := r.start; from != r.end; from = (from + 1) & r.lmask {
+		for size := 0; r.buf[(from+uint(size))&r.imask] == s[size]; size++ {
+			if size == n-1 {
+				return i
+			}
+		}
+
+		i++
+	}
+
+	return -1
 }

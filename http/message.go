@@ -1,9 +1,11 @@
-package websocket
+package message
 
 import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/willmroliver/goagain/core"
 )
 
 const (
@@ -14,8 +16,8 @@ const (
 var ErrBadHeader = errors.New("bad header")
 
 type Message interface {
-	Receive(*Cxn) error
-	Send(*Cxn) error
+	Receive(*core.Cxn) error
+	Send(*core.Cxn) error
 }
 
 // MessageHTTP offers just enough to parse a client handshake
@@ -29,7 +31,7 @@ func NewMessageHTTP() *MessageHTTP {
 	return &MessageHTTP{Headers: make(map[string]string)}
 }
 
-func (m *MessageHTTP) Receive(c *Cxn) error {
+func (m *MessageHTTP) Receive(c *core.Cxn) error {
 	m.Method, m.URI, m.Protocol = "", "", ""
 	m.Headers = make(map[string]string)
 	m.HeaderParsed = false

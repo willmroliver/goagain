@@ -1,4 +1,4 @@
-package websocket_test
+package ws_test
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/willmroliver/goagain/src/websocket"
+	"github.com/willmroliver/goagain/core"
 )
 
 func TestServerRun(t *testing.T) {
-	s, err := websocket.NewServer(9999)
+	s, err := core.NewServer(9999)
 	if err != nil {
 		t.Errorf("exp nil, got %q\n", err)
 		return

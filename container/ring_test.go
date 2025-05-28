@@ -2,6 +2,7 @@ package container_test
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/willmroliver/goagain/src/container"
+	"github.com/willmroliver/goagain/container"
 )
 
 func TestNewRing(t *testing.T) {
@@ -47,7 +48,7 @@ func TestNewRing(t *testing.T) {
 	}
 }
 
-func TestRingPush(t *testing.T) {
+func TestPush(t *testing.T) {
 	type Test struct {
 		size, fill uint
 	}
@@ -102,7 +103,7 @@ func TestRingPush(t *testing.T) {
 	}
 }
 
-func BenchmarkRingPush(t *testing.B) {
+func BenchmarkPush(t *testing.B) {
 	t.Run("Push ints", func(t *testing.B) {
 		r := container.NewRing[int](math.MaxUint32)
 		for t.Loop() {
@@ -126,7 +127,7 @@ func BenchmarkRingPush(t *testing.B) {
 	})
 }
 
-func TestRingPop(t *testing.T) {
+func TestPop(t *testing.T) {
 	type Test struct {
 		size, fill uint
 	}
@@ -187,6 +188,21 @@ func TestRingPop(t *testing.T) {
 
 	for _, test := range tests {
 		doTest(test)
+	}
+}
+
+func TestClear(t *testing.T) {
+	r := container.NewRing[byte](0x1000)
+	r.Write(bytes.Repeat([]byte{1, 2, 3, 4}, 16))
+
+	if r.Empty() {
+		t.Errorf("exp not empty")
+	}
+
+	r.Clear()
+
+	if r.Full() || !r.Empty() || r.Size() != 0 {
+		t.Errorf("exp empty")
 	}
 }
 
@@ -404,6 +420,58 @@ func TestHasSuffix(t *testing.T) {
 					"suffix: %s, search: %s, exp: %t, got: %t\n",
 					test.suffix, test.search, exp, got,
 				)
+				return
+			}
+		})
+	}
+}
+
+func TestIndexOf(t *testing.T) {
+	n := 0x10
+
+	type Test struct {
+		offset           int
+		haystack, needle string
+	}
+
+	tests := []*Test{
+		{0, "", ""},
+		{0, "1", "1"},
+		{n - 1, "1", "1"},
+		{n, "1", "1"},
+		{n + 1, "1", "1"},
+		{0, "12", "12"},
+		{0, "123", "1"},
+		{0, "123", "2"},
+		{0, "123", "3"},
+		{n - 1, "123", "1"},
+		{n, "123", "2"},
+		{n + 1, "123", "3"},
+		{0, "1234", "12"},
+		{n - 2, "12345", "234"},
+		{n - 1, "12345", "234"},
+		{n, "12345", "123"},
+		{n - 4, "12345", "345"},
+		{n - 3, "12345", "345"},
+		{n - 2, "12345", "345"},
+		{n - 1, "12345", "345"},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			exp := strings.Index(test.haystack, test.needle)
+
+			r, b := container.NewRing[byte](uint(n)), byte(0)
+
+			for range test.offset {
+				r.Push(0)
+				r.Pop(&b)
+			}
+
+			r.Write([]byte(test.haystack))
+
+			if got := r.IndexOf([]byte(test.needle)); exp != got {
+				t.Errorf("exp %d, got %d", exp, got)
 				return
 			}
 		})

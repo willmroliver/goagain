@@ -1,11 +1,11 @@
-package websocket
+package ws
 
 import (
 	"context"
 	"net"
 	"time"
 
-	"github.com/willmroliver/goagain/src/container"
+	"github.com/willmroliver/goagain/container"
 )
 
 var inc uint = 0
