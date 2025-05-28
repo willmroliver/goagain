@@ -2,13 +2,13 @@ package core
 
 import (
 	"errors"
-	"io"
+	"net"
 )
 
 var ErrBadHandshake = errors.New("bad handshake")
 
-type Cxn interface {
-	io.ReadWriteCloser
+type Conn interface {
+	net.Conn
 	Handshake() error
 	Open() bool
 	Buf() Buf

@@ -6,5 +6,6 @@ import (
 
 type Server interface {
 	Run(context.Context)
-	NewCxn() *Cxn
+	Accept() (Conn, error)
+	Close(Conn) error
 }

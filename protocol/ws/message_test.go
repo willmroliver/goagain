@@ -1,4 +1,4 @@
-package websocket_test
+package ws_test
 
 import (
 	"bytes"
@@ -7,13 +7,13 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/willmroliver/goagain/src/websocket"
+	"github.com/willmroliver/goagain/protocol/ws"
 )
 
 func TestApplyMask(t *testing.T) {
 	payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
 
-	var f websocket.Frame
+	var f ws.Message
 
 	f.Payload = payload
 	f.MaskingKey = [4]byte{1, 0, 2, 0}
@@ -37,10 +37,10 @@ func TestApplyMask(t *testing.T) {
 
 func TestEncode(t *testing.T) {
 	t.Run("Simple frame", func(t *testing.T) {
-		f := &websocket.Frame{
+		f := &ws.Message{
 			Payload: []byte{1, 1, 2, 2, 3, 3, 4, 4},
 			Final:   true,
-			Opcode:  websocket.FrameOpcodeBinary,
+			Opcode:  ws.FrameOpcodeBinary,
 		}
 
 		exp := []byte{(1 << 7) | f.Opcode, 8}
@@ -52,10 +52,10 @@ func TestEncode(t *testing.T) {
 	})
 
 	t.Run("Extended payload", func(t *testing.T) {
-		f := &websocket.Frame{
+		f := &ws.Message{
 			Payload: bytes.Repeat([]byte{1, 2, 3, 4, 1, 2, 3, 4}, 256),
 			Final:   false,
-			Opcode:  websocket.FrameOpcodeText,
+			Opcode:  ws.FrameOpcodeText,
 		}
 
 		epl := make([]byte, 2)
@@ -95,9 +95,9 @@ func TestEncode(t *testing.T) {
 	t.Run("Masked payload", func(t *testing.T) {
 		payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
 
-		f := &websocket.Frame{
+		f := &ws.Message{
 			Payload:    payload,
-			Opcode:     websocket.FrameOpcodeCont,
+			Opcode:     ws.FrameOpcodeCont,
 			MaskingKey: [4]byte{1, 0, 2, 0},
 		}
 

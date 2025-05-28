@@ -17,11 +17,17 @@ type Buf interface {
 }
 
 type RingBuf struct {
-	container.Ring[byte]
+	*container.Ring[byte]
 }
 
-func (r *RingBuf) Fill(c Cxn) (err error) {
-	_, err = io.Copy(r, c)
+func NewRingBuf(size uint) *RingBuf {
+	return &RingBuf{
+		container.NewRing[byte](size),
+	}
+}
+
+func (r *RingBuf) Fill(s io.Reader) (err error) {
+	_, err = io.Copy(r, s)
 	return
 }
 

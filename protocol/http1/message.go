@@ -1,8 +1,8 @@
-package message
+package http1
 
 import (
-	"errors"
 	"io"
+	"iter"
 	"strings"
 
 	"github.com/willmroliver/goagain/core"
@@ -13,55 +13,50 @@ const (
 	DelimHTTP string = CRLF + CRLF
 )
 
-var ErrBadHeader = errors.New("bad header")
-
-type Message interface {
-	Receive(*core.Cxn) error
-	Send(*core.Cxn) error
-}
-
-// MessageHTTP offers just enough to parse a client handshake
-type MessageHTTP struct {
+// Message offers just enough HTTP/1.1 text-stream
+// parsing support for the WebSocket handshake
+type Message struct {
 	Method, URI, Protocol, StatusLine string
 	Headers                           map[string]string
 	HeaderParsed                      bool
 }
 
-func NewMessageHTTP() *MessageHTTP {
-	return &MessageHTTP{Headers: make(map[string]string)}
+func NewMessage() *Message {
+	return &Message{Headers: make(map[string]string)}
 }
 
-func (m *MessageHTTP) Receive(c *core.Cxn) error {
+func (m *Message) Decode(c core.Conn) error {
 	m.Method, m.URI, m.Protocol = "", "", ""
 	m.Headers = make(map[string]string)
 	m.HeaderParsed = false
 
-	for !c.Buf.HasSuffix([]byte(DelimHTTP)) {
-		if c.Buf.Full() {
-			return ErrBadHeader
+	for i := -1; i == -1; i = c.Buf().IndexOf([]byte(DelimHTTP)) {
+		if c.Buf().Full() {
+			return core.ErrBadHeader
 		}
 
-		io.Copy(c.Buf, c)
+		c.Buf().Fill(c)
 	}
 
 	b := &strings.Builder{}
-	io.Copy(b, c.Buf)
+	io.Copy(b, c.Buf())
 
-	for line := range strings.SplitSeq(b.String(), CRLF) {
-		if m.Method == "" {
-			if !m.parseRequestLine(line) {
-				return ErrBadHeader
-			}
-			continue
-		}
+	it := strings.SplitSeq(b.String(), CRLF)
+	next, _ := iter.Pull(it)
+	line, ok := next()
 
+	if !(ok && m.ParseRequestLine(line)) {
+		return core.ErrBadHeader
+	}
+
+	for line := range it {
 		if line == "" {
 			continue
 		}
 
 		i := strings.IndexByte(line, ':')
 		if i < 1 {
-			return ErrBadHeader
+			return core.ErrBadHeader
 		}
 
 		m.Headers[line[:i]] = line[i+2:]
@@ -70,7 +65,7 @@ func (m *MessageHTTP) Receive(c *core.Cxn) error {
 	return nil
 }
 
-func (m *MessageHTTP) Send(c *Cxn) (err error) {
+func (m *Message) Encode(c core.Conn) (err error) {
 	var b strings.Builder
 
 	b.WriteString(m.Protocol + " " + m.StatusLine + CRLF)
@@ -85,7 +80,7 @@ func (m *MessageHTTP) Send(c *Cxn) (err error) {
 	return
 }
 
-func (m *MessageHTTP) parseRequestLine(s string) bool {
+func (m *Message) ParseRequestLine(s string) bool {
 	parts := strings.Split(s, " ")
 	if len(parts) != 3 {
 		return false

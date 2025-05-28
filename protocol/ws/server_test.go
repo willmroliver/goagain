@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/willmroliver/goagain/core"
+	"github.com/willmroliver/goagain/protocol/ws"
 )
 
 func TestServerRun(t *testing.T) {
-	s, err := core.NewServer(9999)
+	s, err := ws.NewServer(9999)
 	if err != nil {
 		t.Errorf("exp nil, got %q\n", err)
 		return
@@ -27,7 +27,7 @@ func TestServerRun(t *testing.T) {
 		return
 	}
 	time.Sleep(time.Millisecond)
-	if exp, got := 1, len(s.Cxns); exp != got {
+	if exp, got := 1, len(s.Conns); exp != got {
 		t.Errorf("len(Cxns): exp %d, got %d\n", exp, got)
 		return
 	}

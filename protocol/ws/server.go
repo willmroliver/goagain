@@ -5,15 +5,15 @@ import (
 	"net"
 	"time"
 
-	"github.com/willmroliver/goagain/container"
+	"github.com/willmroliver/goagain/core"
 )
 
 var inc uint = 0
 
 type ServerConfig struct {
-	Path       string
-	CxnBufSize uint
-	CxnTimeout time.Duration
+	Path        string
+	ConnBufSize uint
+	ConnTimeout time.Duration
 }
 
 type Server struct {
@@ -21,13 +21,13 @@ type Server struct {
 	Listener  *net.TCPListener
 	KeepAlive net.KeepAliveConfig
 	Conf      ServerConfig
-	Cxns      map[uint]*Cxn
+	Conns     map[uint]core.Conn
 }
 
 func NewServer(port int) (s *Server, err error) {
 	s = &Server{
-		Port: port,
-		Cxns: make(map[uint]*Cxn),
+		Port:  port,
+		Conns: make(map[uint]core.Conn),
 	}
 
 	s.Listener, err = net.ListenTCP("tcp", &net.TCPAddr{
@@ -46,7 +46,7 @@ func (s *Server) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			conn, err := s.Listener.AcceptTCP()
+			conn, err := s.Accept()
 			if err != nil {
 				if ctx.Err() != nil {
 					return
@@ -55,20 +55,32 @@ func (s *Server) Run(ctx context.Context) {
 				continue
 			}
 
-			go s.NewCxn(conn).Talk(ctx)
+			go conn.Handshake()
 		}
 	}
 }
 
-func (s *Server) NewCxn(c *net.TCPConn) (cxn *Cxn) {
-	inc++
-	cxn = &Cxn{
-		TCPConn: c,
-		CxnID:   inc,
-		Server:  s,
-		Buf:     container.NewRing[byte](0x1000),
+func (s *Server) Accept() (core.Conn, error) {
+	conn, err := s.Listener.AcceptTCP()
+	if err != nil {
+		return nil, err
 	}
-	cxn.SetKeepAliveConfig(s.KeepAlive)
-	s.Cxns[inc] = cxn
-	return
+
+	inc++
+
+	c := &Conn{
+		TCPConn: conn,
+		ConnID:  inc,
+		Server:  s,
+		Ring:    core.NewRingBuf(0x1000),
+	}
+
+	c.SetKeepAliveConfig(s.KeepAlive)
+	s.Conns[inc] = c
+	return c, nil
+}
+
+func (s *Server) Close(c core.Conn) error {
+	delete(s.Conns, c.(*Conn).ConnID)
+	return nil
 }

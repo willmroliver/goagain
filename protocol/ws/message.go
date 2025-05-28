@@ -1,4 +1,4 @@
-package websocket
+package ws
 
 import (
 	"bytes"
@@ -17,9 +17,11 @@ const (
 	FrameOpcodePong   = 0xA
 )
 
-var ErrBadFrame = errors.New("malformed frame wire-format")
+var ErrBadFrame = errors.New("malformed WebSocket frame")
 
-type Frame struct {
+// Message serializes and parses individual
+// WebSocket wire-format frames
+type Message struct {
 	Payload    []byte
 	Final      bool
 	Opcode     byte
@@ -27,26 +29,9 @@ type Frame struct {
 	MaskingKey [4]byte
 }
 
-// NewMaskingKey generates a 32-bit cryptographically
-// secure key for masking and unmasking client frames
-func (f *Frame) NewMaskingKey() {
-	rand.Read(f.MaskingKey[:])
-}
-
-// ApplyMask will mask an unmasked payload, or unmask
-// a masked payload, as the WebSocket Protocol masking
-// algrithm is its own inverse
-func (f *Frame) ApplyMask() {
-	for i := range f.Payload {
-		f.Payload[i] ^= f.MaskingKey[i%4]
-	}
-
-	f.Masked = !f.Masked
-}
-
 // Encode serializes a WebSocket Protocol frame in accordance with
 // [RFC6455] and ABNF [RFC5234].
-func (f *Frame) Encode() (data []byte, err error) {
+func (f *Message) Encode() (data []byte, err error) {
 	// FIN + RSV1-3 + opcode + MASK + Payload len
 	n := 2
 
@@ -113,10 +98,10 @@ func (f *Frame) Encode() (data []byte, err error) {
 // [RFC6455] and ABNF [RFC5234].
 //
 // f.Payload is copied from data, so mutations to data
-// after decoding do not affect f after Decode.
+// after decoding do not affect f after Decode completes.
 //
 // If f.Payload is masked, Decode sets f.Masked and does not ApplyMask
-func (f *Frame) Decode(data []byte) (err error) {
+func (f *Message) Decode(data []byte) (err error) {
 	n := len(data)
 	if n < 2 {
 		err = ErrBadFrame
@@ -157,4 +142,21 @@ func (f *Frame) Decode(data []byte) (err error) {
 	copy(f.Payload, data[pstart:pl])
 
 	return
+}
+
+// NewMaskingKey generates a 32-bit cryptographically
+// secure key for masking and unmasking client frames
+func (f *Message) NewMaskingKey() {
+	rand.Read(f.MaskingKey[:])
+}
+
+// ApplyMask will mask an unmasked payload, or unmask
+// a masked payload, as the WebSocket Protocol masking
+// algrithm is its own inverse
+func (f *Message) ApplyMask() {
+	for i := range f.Payload {
+		f.Payload[i] ^= f.MaskingKey[i%4]
+	}
+
+	f.Masked = !f.Masked
 }
