@@ -10,31 +10,6 @@ import (
 	"github.com/willmroliver/goagain/protocol/ws"
 )
 
-func TestApplyMask(t *testing.T) {
-	payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
-
-	var f ws.Message
-
-	f.Payload = payload
-	f.MaskingKey = [4]byte{1, 0, 2, 0}
-
-	f.ApplyMask()
-	exp := []byte{
-		1 ^ 1, 1 ^ 0, 0 ^ 2, 0 ^ 0,
-		2 ^ 1, 2 ^ 0, 4 ^ 2, 4 ^ 0,
-	}
-
-	if !slices.Equal(exp, f.Payload) {
-		t.Errorf("exp %+v, got %+v\n", exp, f.Payload)
-	}
-
-	f.ApplyMask()
-
-	if !slices.Equal(payload, f.Payload) {
-		t.Errorf("exp %+v, got %+v", payload, f.Payload)
-	}
-}
-
 func TestEncode(t *testing.T) {
 	t.Run("Simple frame", func(t *testing.T) {
 		f := &ws.Message{
@@ -118,4 +93,74 @@ func TestEncode(t *testing.T) {
 			return
 		}
 	})
+}
+
+func TestApplyMask(t *testing.T) {
+	payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
+
+	var f ws.Message
+
+	f.Payload = payload
+	f.MaskingKey = [4]byte{1, 0, 2, 0}
+
+	f.ApplyMask()
+	exp := []byte{
+		1 ^ 1, 1 ^ 0, 0 ^ 2, 0 ^ 0,
+		2 ^ 1, 2 ^ 0, 4 ^ 2, 4 ^ 0,
+	}
+
+	if !slices.Equal(exp, f.Payload) {
+		t.Errorf("exp %+v, got %+v\n", exp, f.Payload)
+	}
+
+	f.ApplyMask()
+
+	if !slices.Equal(payload, f.Payload) {
+		t.Errorf("exp %+v, got %+v", payload, f.Payload)
+	}
+}
+
+func BenchmarkApplyMask(t *testing.B) {
+	var f ws.Message
+	f.Payload = slices.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 0x100)
+	f.MaskingKey = [4]byte{1, 2, 3, 4}
+
+	for t.Loop() {
+		f.ApplyMask()
+	}
+}
+
+func TestUnsafeMask(t *testing.T) {
+	payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
+
+	var f ws.Message
+
+	f.Payload = payload
+	f.MaskingKey = [4]byte{1, 0, 2, 0}
+
+	f.UnsafeMask()
+	exp := []byte{
+		1 ^ 1, 1 ^ 0, 0 ^ 2, 0 ^ 0,
+		2 ^ 1, 2 ^ 0, 4 ^ 2, 4 ^ 0,
+	}
+
+	if !slices.Equal(exp, f.Payload) {
+		t.Errorf("exp %+v, got %+v\n", exp, f.Payload)
+	}
+
+	f.UnsafeMask()
+
+	if !slices.Equal(payload, f.Payload) {
+		t.Errorf("exp %+v, got %+v", payload, f.Payload)
+	}
+}
+
+func BenchmarkUnsafeMask(t *testing.B) {
+	var f ws.Message
+	f.Payload = slices.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 0x100)
+	f.MaskingKey = [4]byte{1, 2, 3, 4}
+
+	for t.Loop() {
+		f.UnsafeMask()
+	}
 }
