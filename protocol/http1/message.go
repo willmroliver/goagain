@@ -3,6 +3,7 @@ package http1
 import (
 	"io"
 	"iter"
+	"log"
 	"strings"
 
 	"github.com/willmroliver/goagain/core"
@@ -49,13 +50,18 @@ func (m *Message) Decode(c core.Conn) error {
 		return core.ErrBadHeader
 	}
 
-	for line := range it {
+	for {
+		line, ok = next()
+		if !ok {
+			break
+		}
 		if line == "" {
 			continue
 		}
 
 		i := strings.IndexByte(line, ':')
 		if i < 1 {
+			log.Printf("%d: %q\n", i, line)
 			return core.ErrBadHeader
 		}
 
