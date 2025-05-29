@@ -3,7 +3,7 @@ package core
 import (
 	"io"
 
-	"github.com/willmroliver/goagain/container"
+	"github.com/willmroliver/wsgo/container"
 )
 
 type Buf interface {

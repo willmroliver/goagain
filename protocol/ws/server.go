@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/willmroliver/goagain/core"
+	"github.com/willmroliver/wsgo/core"
 )
 
 var inc uint = 0

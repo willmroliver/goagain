@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/willmroliver/goagain/protocol/ws"
+	"github.com/willmroliver/wsgo/protocol/ws"
 )
 
 func TestEncode(t *testing.T) {

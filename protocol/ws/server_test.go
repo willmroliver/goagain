@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/willmroliver/goagain/protocol/ws"
+	"github.com/willmroliver/wsgo/protocol/ws"
 )
 
 func TestServerRun(t *testing.T) {

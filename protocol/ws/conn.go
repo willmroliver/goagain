@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"net"
 
-	"github.com/willmroliver/goagain/core"
-	"github.com/willmroliver/goagain/protocol/http1"
+	"github.com/willmroliver/wsgo/core"
+	"github.com/willmroliver/wsgo/protocol/http1"
 )
 
 const (
@@ -24,6 +24,7 @@ type Conn struct {
 
 func (c *Conn) Close() error {
 	c.Server.Close(c)
+	c.TCPConn.Write(CloseFrame)
 	return c.TCPConn.Close()
 }
 

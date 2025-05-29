@@ -30,7 +30,13 @@ const (
 	StatusCodeUnexpectedCond   = 1011
 )
 
-var ErrBadFrame = errors.New("malformed WebSocket frame")
+var (
+	ErrBadFrame = errors.New("malformed WebSocket frame")
+
+	CloseFrame = NewCloseFrame(0, "")
+	PingFrame  = NewPingFrame()
+	PongFrame  = NewPongFrame()
+)
 
 // Message serializes and parses individual
 // WebSocket wire-format frames
@@ -196,14 +202,18 @@ func (f *Message) UnsafeMask() {
 }
 
 func NewCloseFrame(status uint16, reason string) []byte {
-	var b strings.Builder
-	binary.Write(&b, binary.BigEndian, status)
-	b.WriteString(reason)
+	m := &Message{
+		Opcode: FrameOpcodeClose,
+	}
 
-	return newControlFrame(&Message{
-		Opcode:  FrameOpcodeClose,
-		Payload: []byte(b.String()),
-	})
+	if status != 0 {
+		var b strings.Builder
+		binary.Write(&b, binary.BigEndian, status)
+		b.WriteString(reason)
+		m.Payload = []byte(b.String())
+	}
+
+	return newControlFrame(m)
 }
 
 func NewPingFrame() []byte {

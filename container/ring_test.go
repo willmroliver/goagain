@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/willmroliver/goagain/container"
+	"github.com/willmroliver/wsgo/container"
 )
 
 func TestNewRing(t *testing.T) {

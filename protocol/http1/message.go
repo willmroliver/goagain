@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/willmroliver/goagain/core"
+	"github.com/willmroliver/wsgo/core"
 )
 
 const (
