@@ -3,6 +3,7 @@ package ws_test
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"math"
 	"slices"
 	"strings"
@@ -127,6 +128,123 @@ func TestEncode(t *testing.T) {
 			return
 		}
 	})
+}
+
+func BenchmarkEncode(t *testing.B) {
+	r := strings.NewReader("")
+	w := new(bytes.Buffer)
+	conn := test.NewConn(r, w)
+
+	f := &ws.Message{
+		Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
+		Opcode:  ws.FrameOpcodeCont,
+	}
+
+	f.NewMaskingKey()
+	f.ApplyMask()
+
+	for t.Loop() {
+		f.Encode(conn)
+		w.Reset()
+	}
+}
+
+func TestDecode(t *testing.T) {
+	r := new(bytes.Reader)
+	w := new(bytes.Buffer)
+	conn := test.NewConn(r, w)
+
+	t.Run("Simple frame", func(t *testing.T) {
+		f, g := ws.Message{
+			Opcode:  ws.FrameOpcodeText,
+			Payload: []byte("Arsenal"),
+		}, ws.Message{}
+
+		data, _ := f.EncodeBytes()
+		conn.Buf().Reset(bytes.NewReader(data))
+
+		if err := g.Decode(conn); err != nil && err != io.EOF {
+			t.Error(err)
+			return
+		}
+
+		if f.Opcode != g.Opcode || !slices.Equal(f.Payload, g.Payload) {
+			t.Errorf("exp %+v, got %+v\n", f, g)
+			return
+		}
+	})
+
+	t.Run("Extended payload", func(t *testing.T) {
+		f, g := ws.Message{
+			Opcode:  ws.FrameOpcodeBinary,
+			Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
+		}, ws.Message{}
+
+		data, _ := f.EncodeBytes()
+		conn.Buf().Reset(bytes.NewReader(data))
+
+		if err := g.Decode(conn); err != nil && err != io.EOF {
+			t.Error(err)
+			return
+		}
+
+		if f.Opcode != g.Opcode || !slices.Equal(f.Payload, g.Payload) {
+			f.Payload = f.Payload[:10]
+			g.Payload = g.Payload[:min(len(g.Payload), 10)]
+			t.Errorf("exp %v, got %v\n", f, g)
+			return
+		}
+	})
+
+	t.Run("Masked payload", func(t *testing.T) {
+		f, g := ws.Message{
+			Opcode:  ws.FrameOpcodeBinary,
+			Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
+		}, ws.Message{}
+		f.ApplyMask()
+
+		data, _ := f.EncodeBytes()
+		conn.Buf().Reset(bytes.NewReader(data))
+
+		if err := g.Decode(conn); err != nil && err != io.EOF {
+			t.Error(err)
+			return
+		}
+
+		if f.Opcode != g.Opcode || !slices.Equal(f.Payload, g.Payload) {
+			f.Payload = f.Payload[:10]
+			g.Payload = g.Payload[:min(len(g.Payload), 10)]
+			t.Errorf("exp %v, got %v\n", f, g)
+			return
+		}
+
+		if f.Masked != g.Masked || !slices.Equal(f.MaskingKey[:], g.MaskingKey[:]) {
+			t.Errorf(
+				"exp (%t, %v), got (%t, %v)\n",
+				f.Masked, f.MaskingKey, g.Masked, g.MaskingKey,
+			)
+			return
+		}
+	})
+}
+
+func BenchmarkDecode(t *testing.B) {
+	f := ws.Message{
+		Opcode:  ws.FrameOpcodeBinary,
+		Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
+	}
+	f.NewMaskingKey()
+	f.ApplyMask()
+	data, _ := f.EncodeBytes()
+
+	r := bytes.NewReader(data)
+	w := new(bytes.Buffer)
+	conn := test.NewConn(r, w)
+
+	for t.Loop() {
+		conn.Buf().Reset(bytes.NewReader(data))
+		f.Decode(conn)
+	}
 }
 
 func TestApplyMask(t *testing.T) {

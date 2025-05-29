@@ -20,6 +20,7 @@ func (r *Buf) Write(p []byte) (int, error) {
 }
 
 func (r *Buf) Fill() (err error) {
+	_, err = r.Reader.Peek(1)
 	return
 }
 
@@ -33,5 +34,5 @@ func (r *Buf) IndexOf(b []byte) int {
 }
 
 func (r *Buf) Available() int {
-	return r.Buffered()
+	return r.Reader.Buffered()
 }

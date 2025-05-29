@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"io"
 	"math"
 	"slices"
 	"strings"
@@ -141,23 +142,17 @@ func (f *Message) Decode(c core.Conn) (err error) {
 	var n, pl, mstart, pstart int
 
 	for ; read < target; err = c.Buf().Fill() {
-		if err != nil {
-			return
-		}
-		if c.Buf().Available() < target {
-			continue
-		}
-
-		n, err = c.Buf().Read(data[read : target-read])
-		if err != nil {
-			return
+		data = data[:target]
+		n, err = c.Buf().Read(data[read:target])
+		if err != nil && err != io.EOF {
+			break
 		}
 
 		if read == 0 {
 			f.Final = data[0]>>7 == 1
 			f.Opcode = data[0] & 0x7
 
-			pl = int(data[1] & 0x7)
+			pl = int(data[1] & 0x7f)
 
 			if 125 < pl && pl <= math.MaxUint16 {
 				target += 2
@@ -165,7 +160,7 @@ func (f *Message) Decode(c core.Conn) (err error) {
 				target += 8
 			}
 
-			if data[1]&0x8 != 0 {
+			if data[1]&0x80 != 0 {
 				mstart = target
 				f.Masked = true
 				target += 4
@@ -178,10 +173,14 @@ func (f *Message) Decode(c core.Conn) (err error) {
 		} else if read == 2 {
 			switch pl {
 			case 126:
-				_, err = binary.Decode(data[2:4], binary.BigEndian, &pl)
+				var epl uint16
+				_, err = binary.Decode(data[2:4], binary.BigEndian, &epl)
+				pl = int(epl)
 				target += pl
 			case 127:
-				_, err = binary.Decode(data[2:10], binary.BigEndian, &pl)
+				var epl uint64
+				_, err = binary.Decode(data[2:10], binary.BigEndian, &epl)
+				pl = int(epl)
 				target += pl
 			}
 
@@ -195,8 +194,14 @@ func (f *Message) Decode(c core.Conn) (err error) {
 		}
 
 		read += n
+		data = slices.Grow(data, target-read)
 	}
 
+	if read != target {
+		return
+	}
+
+	f.Payload = make([]byte, pl)
 	copy(f.Payload, data[pstart:pstart+pl])
 	return
 }
