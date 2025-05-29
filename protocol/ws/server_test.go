@@ -58,6 +58,7 @@ func TestServerRun(t *testing.T) {
 		"\r\n"
 
 	if m := len(exp); n != m {
+		t.Errorf("\n%s\n\n%s\n", exp, buf[:n])
 		t.Errorf("Read n: exp %d, got %d\n", m, n)
 		return
 	}

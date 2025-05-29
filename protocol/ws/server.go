@@ -72,7 +72,8 @@ func (s *Server) Accept() (core.Conn, error) {
 		TCPConn: conn,
 		ConnID:  inc,
 		Server:  s,
-		Ring:    core.NewRingBuf(0x1000, conn),
+
+		buf: core.NewRingBuf(0x1000, conn),
 	}
 
 	c.SetKeepAliveConfig(s.KeepAlive)

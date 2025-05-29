@@ -5,13 +5,21 @@ import (
 	"encoding/binary"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/willmroliver/wsgo/protocol/ws"
+	"github.com/willmroliver/wsgo/test"
 )
 
 func TestEncode(t *testing.T) {
+	r := strings.NewReader("")
+	w := new(bytes.Buffer)
+	conn := test.NewConn(r, w)
+
 	t.Run("Simple frame", func(t *testing.T) {
+		w.Reset()
+
 		f := &ws.Message{
 			Payload: []byte{1, 1, 2, 2, 3, 3, 4, 4},
 			Final:   true,
@@ -21,12 +29,19 @@ func TestEncode(t *testing.T) {
 		exp := []byte{(1 << 7) | f.Opcode, 8}
 		exp = append(exp, f.Payload...)
 
-		if got, _ := f.Encode(); !slices.Equal(exp, got) {
+		if err := f.Encode(conn); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if got := w.Bytes(); !slices.Equal(exp, got) {
 			t.Errorf("exp %+v, got %+v", exp, got)
 		}
 	})
 
 	t.Run("Extended payload", func(t *testing.T) {
+		w.Reset()
+
 		f := &ws.Message{
 			Payload: bytes.Repeat([]byte{1, 2, 3, 4, 1, 2, 3, 4}, 256),
 			Final:   false,
@@ -40,7 +55,12 @@ func TestEncode(t *testing.T) {
 		exp = append(exp, epl...)
 		exp = append(exp, f.Payload...)
 
-		if got, _ := f.Encode(); !slices.Equal(exp, got) {
+		if err := f.Encode(conn); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if got := w.Bytes(); !slices.Equal(exp, got) {
 			t.Errorf(
 				"2 byte EPL - exp %+v, got %+v",
 				exp[:min(len(exp), 100)],
@@ -48,6 +68,8 @@ func TestEncode(t *testing.T) {
 			)
 			return
 		}
+
+		w.Reset()
 
 		f.Payload = bytes.Repeat([]byte{1}, math.MaxUint16*2)
 		epl = make([]byte, 8)
@@ -57,7 +79,12 @@ func TestEncode(t *testing.T) {
 		exp = append(exp, epl...)
 		exp = append(exp, f.Payload...)
 
-		if got, _ := f.Encode(); !slices.Equal(exp, got) {
+		if err := f.Encode(conn); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if got := w.Bytes(); !slices.Equal(exp, got) {
 			t.Errorf(
 				"8-byte EPL - exp %+v, got %+v",
 				exp[:min(len(exp), 100)],
@@ -68,6 +95,8 @@ func TestEncode(t *testing.T) {
 	})
 
 	t.Run("Masked payload", func(t *testing.T) {
+		w.Reset()
+
 		payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
 
 		f := &ws.Message{
@@ -88,7 +117,12 @@ func TestEncode(t *testing.T) {
 			2 ^ 1, 2 ^ 0, 4 ^ 2, 4 ^ 0,
 		}...)
 
-		if got, _ := f.Encode(); !slices.Equal(exp, got) {
+		if err := f.Encode(conn); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if got := w.Bytes(); !slices.Equal(exp, got) {
 			t.Errorf("exp %+v, got %+v", exp, got)
 			return
 		}

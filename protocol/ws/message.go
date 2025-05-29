@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"unsafe"
+
+	"github.com/willmroliver/wsgo/core"
 )
 
 const (
@@ -48,9 +50,21 @@ type Message struct {
 	MaskingKey [4]byte
 }
 
-// Encode serializes a WebSocket Protocol frame in accordance with
+// Encode writes a serialized WebSocket Protocol frame
+// to the underlying Conn
+func (f *Message) Encode(c core.Conn) error {
+	data, err := f.EncodeBytes()
+	if err != nil {
+		return err
+	}
+
+	_, err = c.Write(data)
+	return err
+}
+
+// EncodeBytes serializes a WebSocket Protocol frame in accordance with
 // [RFC6455] and ABNF [RFC5234].
-func (f *Message) Encode() (data []byte, err error) {
+func (f *Message) EncodeBytes() (data []byte, err error) {
 	// FIN + RSV1-3 + opcode + MASK + Payload len
 	n := 2
 
@@ -107,9 +121,11 @@ func (f *Message) Encode() (data []byte, err error) {
 		buf.Write(f.MaskingKey[:])
 	}
 
-	buf.Write(f.Payload)
-	data = buf.Bytes()
+	if _, err = buf.Write(f.Payload); err != nil {
+		return
+	}
 
+	data = buf.Bytes()
 	return
 }
 
@@ -120,46 +136,68 @@ func (f *Message) Encode() (data []byte, err error) {
 // after decoding do not affect f after Decode completes.
 //
 // If f.Payload is masked, Decode sets f.Masked and does not ApplyMask
-func (f *Message) Decode(data []byte) (err error) {
-	n := len(data)
-	if n < 2 {
-		err = ErrBadFrame
-		return
+func (f *Message) Decode(c core.Conn) (err error) {
+	data, read, target := make([]byte, 2, 16), 0, 2
+	var n, pl, mstart, pstart int
+
+	for ; read < target; err = c.Buf().Fill() {
+		if err != nil {
+			return
+		}
+		if c.Buf().Available() < target {
+			continue
+		}
+
+		n, err = c.Buf().Read(data[read : target-read])
+		if err != nil {
+			return
+		}
+
+		if read == 0 {
+			f.Final = data[0]>>7 == 1
+			f.Opcode = data[0] & 0x7
+
+			pl = int(data[1] & 0x7)
+
+			if 125 < pl && pl <= math.MaxUint16 {
+				target += 2
+			} else if math.MaxUint16 < pl {
+				target += 8
+			}
+
+			if data[1]&0x8 != 0 {
+				mstart = target
+				f.Masked = true
+				target += 4
+			}
+
+			pstart = target
+			if pl < 126 {
+				target += pl
+			}
+		} else if read == 2 {
+			switch pl {
+			case 126:
+				_, err = binary.Decode(data[2:4], binary.BigEndian, &pl)
+				target += pl
+			case 127:
+				_, err = binary.Decode(data[2:10], binary.BigEndian, &pl)
+				target += pl
+			}
+
+			if err != nil {
+				return
+			}
+
+			if f.Masked {
+				copy(f.MaskingKey[:], data[mstart:mstart+4])
+			}
+		}
+
+		read += n
 	}
 
-	pstart := 2
-
-	f.Final = data[0]>>7 == 1
-	f.Opcode = data[0] & 0x7
-
-	pl := int(data[1] & 0x7)
-	if 125 < pl && pl <= math.MaxUint16 {
-		pstart += 2
-		_, err = binary.Decode(data[2:4], binary.BigEndian, &pl)
-	} else if math.MaxUint16 < pl {
-		pstart += 8
-		// @todo - proper handling of payloads > 2^32?
-		_, err = binary.Decode(data[2:10], binary.BigEndian, &pl)
-	}
-
-	if err != nil {
-		return
-	}
-
-	if n < pstart+pl {
-		err = ErrBadFrame
-		return
-	}
-
-	if data[1]&0x8 != 0 {
-		f.Masked = true
-		pstart += 4
-		copy(f.MaskingKey[:], data[pstart-4:pstart])
-	}
-
-	f.Payload = make([]byte, pl)
-	copy(f.Payload, data[pstart:pl])
-
+	copy(f.Payload, data[pstart:pstart+pl])
 	return
 }
 
@@ -229,7 +267,7 @@ func NewPongFrame() []byte {
 }
 
 func newControlFrame(m *Message) []byte {
-	data, err := m.Encode()
+	data, err := m.EncodeBytes()
 	if err != nil || len(data) > 125 {
 		data = nil
 	}

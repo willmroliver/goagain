@@ -17,19 +17,19 @@ type Conn struct {
 	*net.TCPConn
 	ConnID uint
 	Server core.Server
-	Ring   core.Buf
 
+	buf  core.Buf
 	open bool
 }
 
 func (c *Conn) Close() error {
 	c.Server.Close(c)
-	c.TCPConn.Write(CloseFrame)
+	c.Write(CloseFrame)
 	return c.TCPConn.Close()
 }
 
 func (c *Conn) Buf() core.Buf {
-	return c.Ring
+	return c.buf
 }
 
 func (c *Conn) Open() bool {
@@ -45,7 +45,7 @@ func (c *Conn) Handshake() (err error) {
 
 	uri := ""
 	s, ok := c.Server.(*Server)
-	if ok {
+	if s != nil && ok {
 		uri = s.Conf.Path
 	}
 
@@ -65,7 +65,7 @@ func (c *Conn) Handshake() (err error) {
 	key := h.Headers["Sec-Websocket-Key"]
 	checksum := sha1.Sum([]byte(key + ProtocolGUID))
 
-	h.StatusLine = "101 Switching Protocols"
+	h.ParseStatusLine("HTTP/1.1 101 Switching Protocols")
 	h.Headers = map[string]string{
 		"Upgrade":    "websocket",
 		"Connection": "Upgrade",
