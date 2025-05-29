@@ -1,7 +1,6 @@
 package http1
 
 import (
-	"io"
 	"iter"
 	"log"
 	"strings"
@@ -30,19 +29,23 @@ func (m *Message) Decode(c core.Conn) error {
 	m.Method, m.URI, m.Protocol = "", "", ""
 	m.Headers = make(map[string]string)
 	m.HeaderParsed = false
+	i := -1
 
-	for i := -1; i == -1; i = c.Buf().IndexOf([]byte(DelimHTTP)) {
+	for ; i == -1; i = c.Buf().IndexOf([]byte(DelimHTTP)) {
 		if c.Buf().Full() {
 			return core.ErrBadHeader
 		}
 
-		c.Buf().Fill(c)
+		c.Buf().Fill()
 	}
 
-	b := &strings.Builder{}
-	io.Copy(b, c.Buf())
+	bytes := make([]byte, i)
+	_, err := c.Buf().Read(bytes)
+	if err != nil {
+		return err
+	}
 
-	it := strings.SplitSeq(b.String(), CRLF)
+	it := strings.SplitSeq(string(bytes), CRLF)
 	next, _ := iter.Pull(it)
 	line, ok := next()
 

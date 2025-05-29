@@ -8,35 +8,35 @@ import (
 
 type Buf interface {
 	io.ReadWriter
-	Fill(io.Reader) error
-	Consume(int) ([]byte, error)
+	Fill() error
 	Available() int
 	Full() bool
-	Clear()
+	Reset(io.Reader)
 	IndexOf([]byte) int
 }
 
 type RingBuf struct {
 	*container.Ring[byte]
+	r io.Reader
 }
 
-func NewRingBuf(size uint) *RingBuf {
+func NewRingBuf(size uint, r io.Reader) *RingBuf {
 	return &RingBuf{
 		container.NewRing[byte](size),
+		r,
 	}
 }
 
-func (r *RingBuf) Fill(s io.Reader) (err error) {
-	_, err = io.Copy(r, s)
-	return
-}
-
-func (r *RingBuf) Consume(n int) (b []byte, err error) {
-	b = make([]byte, n)
-	_, err = r.Write(b)
+func (r *RingBuf) Fill() (err error) {
+	_, err = io.Copy(r, r.r)
 	return
 }
 
 func (r *RingBuf) Available() int {
 	return int(r.Size())
+}
+
+func (r *RingBuf) Reset(s io.Reader) {
+	r.Clear()
+	r.r = s
 }

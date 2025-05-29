@@ -164,3 +164,18 @@ func BenchmarkUnsafeMask(t *testing.B) {
 		f.UnsafeMask()
 	}
 }
+
+func TestNewControlFrameFuncs(t *testing.T) {
+	frames := [][]byte{
+		ws.NewCloseFrame(ws.StatusCodeNormalClosure, "Normal closure"),
+		ws.NewPingFrame(),
+		ws.NewPongFrame(),
+	}
+
+	for _, f := range frames {
+		if exp, got := 125, len(f); exp < got {
+			t.Errorf("exp < %d, got %d", exp, got)
+			return
+		}
+	}
+}

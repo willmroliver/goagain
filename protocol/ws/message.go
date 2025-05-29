@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"slices"
+	"strings"
 	"unsafe"
 )
 
@@ -17,6 +18,16 @@ const (
 	FrameOpcodeClose  = 0x8
 	FrameOpcodePing   = 0x9
 	FrameOpcodePong   = 0xA
+
+	StatusCodeNormalClosure    = 1000
+	StatusCodeGoingAway        = 1001
+	StatusCodeProtocolError    = 1002
+	StatusCodeBadDataType      = 1003
+	StatusCodeInconsistentData = 1007
+	StatusCodePolicyViolated   = 1008
+	StatusCodeMessageTooBig    = 1009
+	StatusCodeNeedExtension    = 1010
+	StatusCodeUnexpectedCond   = 1011
 )
 
 var ErrBadFrame = errors.New("malformed WebSocket frame")
@@ -182,4 +193,36 @@ func (f *Message) UnsafeMask() {
 	for ; i < n; i++ {
 		f.Payload[i] ^= f.MaskingKey[i%4]
 	}
+}
+
+func NewCloseFrame(status uint16, reason string) []byte {
+	var b strings.Builder
+	binary.Write(&b, binary.BigEndian, status)
+	b.WriteString(reason)
+
+	return newControlFrame(&Message{
+		Opcode:  FrameOpcodeClose,
+		Payload: []byte(b.String()),
+	})
+}
+
+func NewPingFrame() []byte {
+	return newControlFrame(&Message{
+		Opcode: FrameOpcodePing,
+	})
+}
+
+func NewPongFrame() []byte {
+	return newControlFrame(&Message{
+		Opcode: FrameOpcodePong,
+	})
+}
+
+func newControlFrame(m *Message) []byte {
+	data, err := m.Encode()
+	if err != nil || len(data) > 125 {
+		data = nil
+	}
+
+	return data
 }
