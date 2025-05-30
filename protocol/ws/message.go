@@ -66,28 +66,6 @@ func (f *Message) Encode(c core.Conn) error {
 // EncodeBytes serializes a WebSocket Protocol frame in accordance with
 // [RFC6455] and ABNF [RFC5234].
 func (f *Message) EncodeBytes() (data []byte, err error) {
-	// FIN + RSV1-3 + opcode + MASK + Payload len
-	n := 2
-
-	// Extended payload len
-	pl, epl := len(f.Payload), 0
-
-	if 125 < pl && pl <= math.MaxUint16 {
-		epl = 2
-	} else if math.MaxUint16 < pl {
-		epl = 8
-	}
-
-	n += epl + pl
-
-	// Masking key
-	if f.Masked {
-		n += 4
-	}
-
-	buf := new(bytes.Buffer)
-	buf.Grow(n)
-
 	var b [2]byte
 	if f.Final {
 		b[0] = 1
@@ -98,20 +76,26 @@ func (f *Message) EncodeBytes() (data []byte, err error) {
 		b[1] = (1 << 7)
 	}
 
+	pl := len(f.Payload)
+
 	switch {
-	case epl == 0:
-		b[1] |= byte(pl)
-		buf.Write(b[:])
-	case epl == 2:
-		b[1] |= 126
-		buf.Write(b[:])
-		err = binary.Write(buf, binary.BigEndian, uint16(pl))
-	case epl == 8:
+	case pl > math.MaxUint16:
 		b[1] |= 127
-		buf.Write(b[:])
+	case pl > 125:
+		b[1] |= 126
+	case pl >= 0:
+		b[1] |= byte(pl)
+	}
+
+	buf := new(bytes.Buffer)
+	buf.Grow(pl + 14)
+	buf.Write(b[:])
+
+	switch {
+	case pl > math.MaxUint16:
 		err = binary.Write(buf, binary.BigEndian, uint64(pl))
-	default:
-		panic("invalid payload len!")
+	case pl > 125:
+		err = binary.Write(buf, binary.BigEndian, uint16(pl))
 	}
 
 	if err != nil {
@@ -119,7 +103,9 @@ func (f *Message) EncodeBytes() (data []byte, err error) {
 	}
 
 	if f.Masked {
-		buf.Write(f.MaskingKey[:])
+		if _, err = buf.Write(f.MaskingKey[:]); err != nil {
+			return
+		}
 	}
 
 	if _, err = buf.Write(f.Payload); err != nil {
