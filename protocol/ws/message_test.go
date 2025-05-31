@@ -21,7 +21,7 @@ func TestEncode(t *testing.T) {
 	t.Run("Simple frame", func(t *testing.T) {
 		w.Reset()
 
-		f := ws.NewMessage(ws.FrameOpcodeBinary).
+		f := ws.NewMessage(ws.OpcodeBinary).
 			SetPayload([]byte{1, 1, 2, 2, 3, 3, 4, 4})
 		f.FIN = true
 
@@ -41,7 +41,7 @@ func TestEncode(t *testing.T) {
 	t.Run("Extended payload", func(t *testing.T) {
 		w.Reset()
 
-		f := ws.NewMessage(ws.FrameOpcodeBinary).
+		f := ws.NewMessage(ws.OpcodeBinary).
 			SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x200))
 
 		epl := make([]byte, 2)
@@ -93,7 +93,7 @@ func TestEncode(t *testing.T) {
 	t.Run("MASK payload", func(t *testing.T) {
 		w.Reset()
 
-		f := ws.NewMessage(ws.FrameOpcodeCont).
+		f := ws.NewMessage(ws.OpcodeCont).
 			SetPayload([]byte{1, 1, 0, 0, 2, 2, 4, 4})
 
 		payload := f.Payload
@@ -128,7 +128,7 @@ func BenchmarkEncode(t *testing.B) {
 	w := new(bytes.Buffer)
 	conn := test.NewConn(r, w)
 
-	f := ws.NewMessage(ws.FrameOpcodeCont)
+	f := ws.NewMessage(ws.OpcodeCont)
 	f.SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100))
 
 	f.NewMaskingKey()
@@ -146,7 +146,7 @@ func TestDecode(t *testing.T) {
 	conn := test.NewConn(r, w)
 
 	t.Run("Simple frame", func(t *testing.T) {
-		f := ws.NewMessage(ws.FrameOpcodeText).
+		f := ws.NewMessage(ws.OpcodeText).
 			SetPayload([]byte("Arsenal"))
 
 		data, _ := f.EncodeBytes()
@@ -165,7 +165,7 @@ func TestDecode(t *testing.T) {
 	})
 
 	t.Run("Extended payload", func(t *testing.T) {
-		f := ws.NewMessage(ws.FrameOpcodeBinary).
+		f := ws.NewMessage(ws.OpcodeBinary).
 			SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100))
 
 		data, _ := f.EncodeBytes()
@@ -186,7 +186,7 @@ func TestDecode(t *testing.T) {
 	})
 
 	t.Run("MASK payload", func(t *testing.T) {
-		f := ws.NewMessage(ws.FrameOpcodeBinary).
+		f := ws.NewMessage(ws.OpcodeBinary).
 			SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100))
 
 		f.MaskingKey = [4]byte{1, 0, 2, 0}
@@ -219,7 +219,7 @@ func TestDecode(t *testing.T) {
 }
 
 func BenchmarkDecode(t *testing.B) {
-	f := ws.NewMessage(ws.FrameOpcodeBinary).
+	f := ws.NewMessage(ws.OpcodeBinary).
 		SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100)).
 		NewMaskingKey().
 		ApplyMask()
@@ -262,7 +262,7 @@ func TestApplyMask(t *testing.T) {
 }
 
 func BenchmarkApplyMask(t *testing.B) {
-	f := ws.NewMessage(ws.FrameOpcodeBinary).
+	f := ws.NewMessage(ws.OpcodeBinary).
 		SetPayload(slices.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 0x100)).
 		NewMaskingKey()
 
@@ -272,7 +272,7 @@ func BenchmarkApplyMask(t *testing.B) {
 }
 
 func TestUnsafeMask(t *testing.T) {
-	f := ws.NewMessage(ws.FrameOpcodeBinary).
+	f := ws.NewMessage(ws.OpcodeBinary).
 		SetPayload([]byte{1, 1, 0, 0, 2, 2, 4, 4})
 
 	payload := f.Payload

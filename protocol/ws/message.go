@@ -15,12 +15,12 @@ import (
 )
 
 const (
-	FrameOpcodeCont   = 0x0
-	FrameOpcodeText   = 0x1
-	FrameOpcodeBinary = 0x2
-	FrameOpcodeClose  = 0x8
-	FrameOpcodePing   = 0x9
-	FrameOpcodePong   = 0xA
+	OpcodeCont   byte = 0x0
+	OpcodeText   byte = 0x1
+	OpcodeBinary byte = 0x2
+	OpcodeClose  byte = 0x8
+	OpcodePing   byte = 0x9
+	OpcodePong   byte = 0xA
 
 	StatusCodeNormalClosure    = 1000
 	StatusCodeGoingAway        = 1001
@@ -37,8 +37,8 @@ var (
 	ErrBadFrame = errors.New("malformed WebSocket frame")
 
 	CloseFrame = NewCloseFrame(0, "")
-	PingFrame  = NewMessage(FrameOpcodePing)
-	PongFrame  = NewMessage(FrameOpcodePong)
+	PingFrame  = NewMessage(OpcodePing)
+	PongFrame  = NewMessage(OpcodePong)
 )
 
 type FrameHeader struct {
@@ -283,7 +283,7 @@ func (f *Message) UnsafeMask() *Message {
 }
 
 func NewCloseFrame(status uint16, reason string) *Message {
-	m := NewMessage(FrameOpcodeClose)
+	m := NewMessage(OpcodeClose)
 
 	if status != 0 {
 		var b strings.Builder
