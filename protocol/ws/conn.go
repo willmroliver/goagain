@@ -24,7 +24,7 @@ type Conn struct {
 
 func (c *Conn) Close() error {
 	c.Server.Close(c)
-	c.Write(CloseFrame)
+	CloseFrame.Encode(c)
 	return c.TCPConn.Close()
 }
 

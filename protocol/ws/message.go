@@ -37,18 +37,36 @@ var (
 	ErrBadFrame = errors.New("malformed WebSocket frame")
 
 	CloseFrame = NewCloseFrame(0, "")
-	PingFrame  = NewPingFrame()
-	PongFrame  = NewPongFrame()
+	PingFrame  = NewMessage(FrameOpcodePing)
+	PongFrame  = NewMessage(FrameOpcodePong)
 )
+
+type FrameHeader struct {
+	FIN, MASK        bool
+	RSV1, RSV2, RSV3 bool
+	Opcode           byte
+	PL, EPL          int
+	MaskingKey       [4]byte
+}
 
 // Message serializes and parses individual
 // WebSocket wire-format frames
 type Message struct {
-	Payload    []byte
-	Final      bool
-	Opcode     byte
-	Masked     bool
-	MaskingKey [4]byte
+	FrameHeader
+	Payload []byte
+}
+
+func NewMessage(op byte) *Message {
+	return &Message{
+		FrameHeader: FrameHeader{
+			Opcode: op,
+		},
+	}
+}
+
+func (f *Message) SetPayload(p []byte) *Message {
+	f.Payload, f.PL = p, len(p)
+	return f
 }
 
 // Encode writes a serialized WebSocket Protocol frame
@@ -67,12 +85,12 @@ func (f *Message) Encode(c core.Conn) error {
 // [RFC6455] and ABNF [RFC5234].
 func (f *Message) EncodeBytes() (data []byte, err error) {
 	var b [2]byte
-	if f.Final {
+	if f.FIN {
 		b[0] = 1
 	}
 
 	b[0] = (b[0] << 7) | f.Opcode
-	if f.Masked {
+	if f.MASK {
 		b[1] = (1 << 7)
 	}
 
@@ -102,7 +120,7 @@ func (f *Message) EncodeBytes() (data []byte, err error) {
 		return
 	}
 
-	if f.Masked {
+	if f.MASK {
 		if _, err = buf.Write(f.MaskingKey[:]); err != nil {
 			return
 		}
@@ -116,102 +134,134 @@ func (f *Message) EncodeBytes() (data []byte, err error) {
 	return
 }
 
-// Decode parses WebSocket Protocol frame bytes in accordance with
+// Decode parses frame bytes in accordance with
 // [RFC6455] and ABNF [RFC5234].
 //
 // f.Payload is copied from data, so mutations to data
 // after decoding do not affect f after Decode completes.
 //
-// If f.Payload is masked, Decode sets f.Masked and does not ApplyMask
+// If f.Payload is masked, Decode sets f.MASK and does not ApplyMask
 func (f *Message) Decode(c core.Conn) (err error) {
-	data, read, target := make([]byte, 2, 16), 0, 2
-	var n, pl, mstart, pstart int
-
-	for ; read < target; err = c.Buf().Fill() {
-		data = data[:target]
-		n, err = c.Buf().Read(data[read:target])
-		if err != nil && err != io.EOF {
-			break
-		}
-
-		if read == 0 {
-			f.Final = data[0]>>7 == 1
-			f.Opcode = data[0] & 0x7
-
-			pl = int(data[1] & 0x7f)
-
-			if 125 < pl && pl <= math.MaxUint16 {
-				target += 2
-			} else if math.MaxUint16 < pl {
-				target += 8
-			}
-
-			if data[1]&0x80 != 0 {
-				mstart = target
-				f.Masked = true
-				target += 4
-			}
-
-			pstart = target
-			if pl < 126 {
-				target += pl
-			}
-		} else if read == 2 {
-			switch pl {
-			case 126:
-				var epl uint16
-				_, err = binary.Decode(data[2:4], binary.BigEndian, &epl)
-				pl = int(epl)
-				target += pl
-			case 127:
-				var epl uint64
-				_, err = binary.Decode(data[2:10], binary.BigEndian, &epl)
-				pl = int(epl)
-				target += pl
-			}
-
-			if err != nil {
-				return
-			}
-
-			if f.Masked {
-				copy(f.MaskingKey[:], data[mstart:mstart+4])
-			}
-		}
-
-		read += n
-		data = slices.Grow(data, target-read)
-	}
-
-	if read != target {
+	if err = f.decodeHeader(c); err != nil {
 		return
 	}
 
-	f.Payload = make([]byte, pl)
-	copy(f.Payload, data[pstart:pstart+pl])
+	f.Payload = make([]byte, f.PL)
+	buf, read, n := c.Buf(), 0, 0
+
+	for buf.Available() < f.PL-read {
+		if err = buf.Fill(); err != nil {
+			return
+		}
+		if !buf.Full() {
+			continue
+		}
+
+		n, err = buf.Read(f.Payload[read:])
+		if err != nil && err != io.EOF {
+			return
+		}
+
+		read += n
+	}
+
+	if _, err = buf.Read(f.Payload[read:]); err == io.EOF {
+		err = nil
+	}
+
+	return
+}
+
+func (f *Message) decodeHeader(c core.Conn) (err error) {
+	buf, read, target := c.Buf(), 0, 2
+	data := make([]byte, 2, 16)
+
+	for buf.Available() < target {
+		if err = buf.Fill(); err != nil {
+			return
+		}
+	}
+
+	var n int
+	if n, err = buf.Read(data); err != nil {
+		return
+	}
+
+	read += n
+
+	f.FIN = (data[0] & 0x80) == 1
+	f.Opcode = data[0] & 0x7
+
+	f.PL = int(data[1] & 0x7f)
+
+	switch f.PL {
+	case 126:
+		target += 2
+	case 127:
+		target += 8
+	}
+
+	var mstart int
+
+	if data[1]&0x80 != 0 {
+		f.MASK = true
+		mstart = target
+		target += 4
+	}
+
+	for buf.Available() < target-read {
+		if err = buf.Fill(); err != nil {
+			return
+		}
+	}
+
+	data = data[:target]
+
+	n, err = c.Buf().Read(data[read:])
+	if err != nil && err != io.EOF {
+		return
+	}
+
+	read += n
+
+	if f.MASK {
+		copy(f.MaskingKey[:], data[mstart:mstart+4])
+	}
+
+	// in theory, this will truncate / sign-invert
+	// on a 32-bit OS if payload size >= 2GiB
+	switch f.PL {
+	case 126:
+		f.PL = int(binary.BigEndian.Uint16(data[2:4]))
+	case 127:
+		f.PL = int(binary.BigEndian.Uint64(data[2:10]))
+	}
+
 	return
 }
 
 // NewMaskingKey generates a 32-bit cryptographically
 // secure key for masking and unmasking client frames
-func (f *Message) NewMaskingKey() {
+func (f *Message) NewMaskingKey() *Message {
 	rand.Read(f.MaskingKey[:])
+	return f
 }
 
-// ApplyMask will mask an unmasked payload, or unmask
-// a masked payload, as the WebSocket Protocol masking
-// algorithm is its own inverse
-func (f *Message) ApplyMask() {
+// ApplyMask masks an unmasked payload, and unmasks
+// a masked payload (the XOR-based algorithm is its own
+// inverse)
+func (f *Message) ApplyMask() *Message {
 	for i := range f.Payload {
 		f.Payload[i] ^= f.MaskingKey[i%4]
 	}
 
-	f.Masked = !f.Masked
+	f.MASK = !f.MASK
+	return f
 }
 
 // UnsafeMask bypasses Go type-safety to perform the XOR
-// operations in 64-bit chunks: 6.5x faster than ApplyMask
-func (f *Message) UnsafeMask() {
+// operations in 64-bit chunks: 6x faster than naive approach
+func (f *Message) UnsafeMask() *Message {
 	n := len(f.Payload)
 	bytes := unsafe.SliceData(slices.Repeat(f.MaskingKey[:], 2))
 	key64 := *(*uint64)(unsafe.Pointer(bytes))
@@ -228,12 +278,12 @@ func (f *Message) UnsafeMask() {
 	for ; i < n; i++ {
 		f.Payload[i] ^= f.MaskingKey[i%4]
 	}
+
+	return f
 }
 
-func NewCloseFrame(status uint16, reason string) []byte {
-	m := &Message{
-		Opcode: FrameOpcodeClose,
-	}
+func NewCloseFrame(status uint16, reason string) *Message {
+	m := NewMessage(FrameOpcodeClose)
 
 	if status != 0 {
 		var b strings.Builder
@@ -242,26 +292,5 @@ func NewCloseFrame(status uint16, reason string) []byte {
 		m.Payload = []byte(b.String())
 	}
 
-	return newControlFrame(m)
-}
-
-func NewPingFrame() []byte {
-	return newControlFrame(&Message{
-		Opcode: FrameOpcodePing,
-	})
-}
-
-func NewPongFrame() []byte {
-	return newControlFrame(&Message{
-		Opcode: FrameOpcodePong,
-	})
-}
-
-func newControlFrame(m *Message) []byte {
-	data, err := m.EncodeBytes()
-	if err != nil || len(data) > 125 {
-		data = nil
-	}
-
-	return data
+	return m
 }

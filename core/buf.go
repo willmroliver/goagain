@@ -9,8 +9,8 @@ import (
 type Buf interface {
 	io.ReadWriter
 	Fill() error
-	Available() int
 	Full() bool
+	Available() int
 	Reset(io.Reader)
 	IndexOf([]byte) int
 }

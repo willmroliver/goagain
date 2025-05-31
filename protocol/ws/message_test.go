@@ -21,13 +21,11 @@ func TestEncode(t *testing.T) {
 	t.Run("Simple frame", func(t *testing.T) {
 		w.Reset()
 
-		f := &ws.Message{
-			Payload: []byte{1, 1, 2, 2, 3, 3, 4, 4},
-			Final:   true,
-			Opcode:  ws.FrameOpcodeBinary,
-		}
+		f := ws.NewMessage(ws.FrameOpcodeBinary).
+			SetPayload([]byte{1, 1, 2, 2, 3, 3, 4, 4})
+		f.FIN = true
 
-		exp := []byte{(1 << 7) | f.Opcode, 8}
+		exp := []byte{0x80 | f.Opcode, 8}
 		exp = append(exp, f.Payload...)
 
 		if err := f.Encode(conn); err != nil {
@@ -43,11 +41,8 @@ func TestEncode(t *testing.T) {
 	t.Run("Extended payload", func(t *testing.T) {
 		w.Reset()
 
-		f := &ws.Message{
-			Payload: bytes.Repeat([]byte{1, 2, 3, 4, 1, 2, 3, 4}, 256),
-			Final:   false,
-			Opcode:  ws.FrameOpcodeText,
-		}
+		f := ws.NewMessage(ws.FrameOpcodeBinary).
+			SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x200))
 
 		epl := make([]byte, 2)
 		binary.Encode(epl, binary.BigEndian, uint16(len(f.Payload)))
@@ -95,17 +90,15 @@ func TestEncode(t *testing.T) {
 		}
 	})
 
-	t.Run("Masked payload", func(t *testing.T) {
+	t.Run("MASK payload", func(t *testing.T) {
 		w.Reset()
 
-		payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
+		f := ws.NewMessage(ws.FrameOpcodeCont).
+			SetPayload([]byte{1, 1, 0, 0, 2, 2, 4, 4})
 
-		f := &ws.Message{
-			Payload:    payload,
-			Opcode:     ws.FrameOpcodeCont,
-			MaskingKey: [4]byte{1, 0, 2, 0},
-		}
+		payload := f.Payload
 
+		f.MaskingKey = [4]byte{1, 0, 2, 0}
 		f.ApplyMask()
 
 		exp := []byte{
@@ -135,10 +128,8 @@ func BenchmarkEncode(t *testing.B) {
 	w := new(bytes.Buffer)
 	conn := test.NewConn(r, w)
 
-	f := &ws.Message{
-		Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
-		Opcode:  ws.FrameOpcodeCont,
-	}
+	f := ws.NewMessage(ws.FrameOpcodeCont)
+	f.SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100))
 
 	f.NewMaskingKey()
 	f.ApplyMask()
@@ -155,14 +146,13 @@ func TestDecode(t *testing.T) {
 	conn := test.NewConn(r, w)
 
 	t.Run("Simple frame", func(t *testing.T) {
-		f, g := ws.Message{
-			Opcode:  ws.FrameOpcodeText,
-			Payload: []byte("Arsenal"),
-		}, ws.Message{}
+		f := ws.NewMessage(ws.FrameOpcodeText).
+			SetPayload([]byte("Arsenal"))
 
 		data, _ := f.EncodeBytes()
 		conn.Buf().Reset(bytes.NewReader(data))
 
+		g := new(ws.Message)
 		if err := g.Decode(conn); err != nil && err != io.EOF {
 			t.Error(err)
 			return
@@ -175,14 +165,13 @@ func TestDecode(t *testing.T) {
 	})
 
 	t.Run("Extended payload", func(t *testing.T) {
-		f, g := ws.Message{
-			Opcode:  ws.FrameOpcodeBinary,
-			Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
-		}, ws.Message{}
+		f := ws.NewMessage(ws.FrameOpcodeBinary).
+			SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100))
 
 		data, _ := f.EncodeBytes()
 		conn.Buf().Reset(bytes.NewReader(data))
 
+		g := new(ws.Message)
 		if err := g.Decode(conn); err != nil && err != io.EOF {
 			t.Error(err)
 			return
@@ -196,16 +185,17 @@ func TestDecode(t *testing.T) {
 		}
 	})
 
-	t.Run("Masked payload", func(t *testing.T) {
-		f, g := ws.Message{
-			Opcode:  ws.FrameOpcodeBinary,
-			Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
-		}, ws.Message{}
+	t.Run("MASK payload", func(t *testing.T) {
+		f := ws.NewMessage(ws.FrameOpcodeBinary).
+			SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100))
+
+		f.MaskingKey = [4]byte{1, 0, 2, 0}
 		f.ApplyMask()
 
 		data, _ := f.EncodeBytes()
 		conn.Buf().Reset(bytes.NewReader(data))
 
+		g := new(ws.Message)
 		if err := g.Decode(conn); err != nil && err != io.EOF {
 			t.Error(err)
 			return
@@ -218,10 +208,10 @@ func TestDecode(t *testing.T) {
 			return
 		}
 
-		if f.Masked != g.Masked || !slices.Equal(f.MaskingKey[:], g.MaskingKey[:]) {
+		if f.MASK != g.MASK || !slices.Equal(f.MaskingKey[:], g.MaskingKey[:]) {
 			t.Errorf(
 				"exp (%t, %v), got (%t, %v)\n",
-				f.Masked, f.MaskingKey, g.Masked, g.MaskingKey,
+				f.MASK, f.MaskingKey, g.MASK, g.MaskingKey,
 			)
 			return
 		}
@@ -229,12 +219,11 @@ func TestDecode(t *testing.T) {
 }
 
 func BenchmarkDecode(t *testing.B) {
-	f := ws.Message{
-		Opcode:  ws.FrameOpcodeBinary,
-		Payload: slices.Repeat([]byte{1, 2, 3, 4}, 0x100),
-	}
-	f.NewMaskingKey()
-	f.ApplyMask()
+	f := ws.NewMessage(ws.FrameOpcodeBinary).
+		SetPayload(slices.Repeat([]byte{1, 2, 3, 4}, 0x100)).
+		NewMaskingKey().
+		ApplyMask()
+
 	data, _ := f.EncodeBytes()
 
 	r := bytes.NewReader(data)
@@ -273,9 +262,9 @@ func TestApplyMask(t *testing.T) {
 }
 
 func BenchmarkApplyMask(t *testing.B) {
-	var f ws.Message
-	f.Payload = slices.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 0x100)
-	f.MaskingKey = [4]byte{1, 2, 3, 4}
+	f := ws.NewMessage(ws.FrameOpcodeBinary).
+		SetPayload(slices.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 0x100)).
+		NewMaskingKey()
 
 	for t.Loop() {
 		f.ApplyMask()
@@ -283,14 +272,14 @@ func BenchmarkApplyMask(t *testing.B) {
 }
 
 func TestUnsafeMask(t *testing.T) {
-	payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
+	f := ws.NewMessage(ws.FrameOpcodeBinary).
+		SetPayload([]byte{1, 1, 0, 0, 2, 2, 4, 4})
 
-	var f ws.Message
+	payload := f.Payload
 
-	f.Payload = payload
 	f.MaskingKey = [4]byte{1, 0, 2, 0}
-
 	f.UnsafeMask()
+
 	exp := []byte{
 		1 ^ 1, 1 ^ 0, 0 ^ 2, 0 ^ 0,
 		2 ^ 1, 2 ^ 0, 4 ^ 2, 4 ^ 0,
@@ -314,20 +303,5 @@ func BenchmarkUnsafeMask(t *testing.B) {
 
 	for t.Loop() {
 		f.UnsafeMask()
-	}
-}
-
-func TestNewControlFrameFuncs(t *testing.T) {
-	frames := [][]byte{
-		ws.NewCloseFrame(ws.StatusCodeNormalClosure, "Normal closure"),
-		ws.NewPingFrame(),
-		ws.NewPongFrame(),
-	}
-
-	for _, f := range frames {
-		if exp, got := 125, len(f); exp < got {
-			t.Errorf("exp < %d, got %d", exp, got)
-			return
-		}
 	}
 }
