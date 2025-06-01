@@ -236,15 +236,15 @@ func BenchmarkDecode(t *testing.B) {
 	}
 }
 
-func TestApplyMask(t *testing.T) {
-	payload := []byte{1, 1, 0, 0, 2, 2, 4, 4}
-
-	var f ws.Message
-
-	f.Payload = payload
+func maskTest(t *testing.T, do func(f *ws.Message)) {
+	f := new(ws.Message).
+		SetPayload([]byte{1, 1, 0, 0, 2, 2, 4, 4})
 	f.MaskingKey = [4]byte{1, 0, 2, 0}
 
-	f.ApplyMask()
+	payload := f.Payload
+
+	do(f)
+
 	exp := []byte{
 		1 ^ 1, 1 ^ 0, 0 ^ 2, 0 ^ 0,
 		2 ^ 1, 2 ^ 0, 4 ^ 2, 4 ^ 0,
@@ -254,11 +254,17 @@ func TestApplyMask(t *testing.T) {
 		t.Errorf("exp %+v, got %+v\n", exp, f.Payload)
 	}
 
-	f.ApplyMask()
+	do(f)
 
 	if !slices.Equal(payload, f.Payload) {
 		t.Errorf("exp %+v, got %+v", payload, f.Payload)
 	}
+}
+
+func TestApplyMask(t *testing.T) {
+	maskTest(t, func(f *ws.Message) {
+		f.ApplyMask()
+	})
 }
 
 func BenchmarkApplyMask(t *testing.B) {
@@ -272,34 +278,15 @@ func BenchmarkApplyMask(t *testing.B) {
 }
 
 func TestUnsafeMask(t *testing.T) {
-	f := ws.NewMessage(ws.OpcodeBinary).
-		SetPayload([]byte{1, 1, 0, 0, 2, 2, 4, 4})
-
-	payload := f.Payload
-
-	f.MaskingKey = [4]byte{1, 0, 2, 0}
-	f.UnsafeMask()
-
-	exp := []byte{
-		1 ^ 1, 1 ^ 0, 0 ^ 2, 0 ^ 0,
-		2 ^ 1, 2 ^ 0, 4 ^ 2, 4 ^ 0,
-	}
-
-	if !slices.Equal(exp, f.Payload) {
-		t.Errorf("exp %+v, got %+v\n", exp, f.Payload)
-	}
-
-	f.UnsafeMask()
-
-	if !slices.Equal(payload, f.Payload) {
-		t.Errorf("exp %+v, got %+v", payload, f.Payload)
-	}
+	maskTest(t, func(f *ws.Message) {
+		f.UnsafeMask()
+	})
 }
 
 func BenchmarkUnsafeMask(t *testing.B) {
-	var f ws.Message
-	f.Payload = slices.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 0x100)
-	f.MaskingKey = [4]byte{1, 2, 3, 4}
+	f := ws.NewMessage(ws.OpcodeBinary).
+		SetPayload(slices.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 0x100)).
+		NewMaskingKey()
 
 	for t.Loop() {
 		f.UnsafeMask()

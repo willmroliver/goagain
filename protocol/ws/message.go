@@ -251,33 +251,45 @@ func (f *Message) NewMaskingKey() *Message {
 // a masked payload (the XOR-based algorithm is its own
 // inverse)
 func (f *Message) ApplyMask() *Message {
-	for i := range f.Payload {
+	key64 := binary.LittleEndian.Uint64(bytes.Repeat(f.MaskingKey[:], 2))
+
+	var i int
+
+	for ; i+8 <= f.PL; i += 8 {
+		binary.LittleEndian.PutUint64(
+			f.Payload[i:],
+			binary.LittleEndian.Uint64(f.Payload[i:])^key64,
+		)
+	}
+
+	for ; i < f.PL; i++ {
 		f.Payload[i] ^= f.MaskingKey[i%4]
 	}
 
 	f.MASK = !f.MASK
+
 	return f
 }
 
-// UnsafeMask bypasses Go type-safety to perform the XOR
-// operations in 64-bit chunks: 6x faster than naive approach
+// UnsafeMask bypasses type-safety & `package binary` function calls to perform
+// 64-bit XOR directly on payload memory: >2x faster than ApplyMask
 func (f *Message) UnsafeMask() *Message {
 	n := len(f.Payload)
 	bytes := unsafe.SliceData(slices.Repeat(f.MaskingKey[:], 2))
 	key64 := *(*uint64)(unsafe.Pointer(bytes))
+	payload64 := (unsafe.Pointer(unsafe.SliceData(f.Payload)))
 
-	var payload64 *uint64
 	var i int
 
 	for ; i+8 <= n; i += 8 {
-		bytes = unsafe.SliceData(f.Payload[i : i+8])
-		payload64 = (*uint64)(unsafe.Pointer(bytes))
-		*payload64 ^= key64
+		*(*uint64)(unsafe.Add(payload64, i)) ^= key64
 	}
 
 	for ; i < n; i++ {
 		f.Payload[i] ^= f.MaskingKey[i%4]
 	}
+
+	f.MASK = !f.MASK
 
 	return f
 }
