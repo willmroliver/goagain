@@ -2,6 +2,7 @@ package ws_test
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -10,7 +11,9 @@ import (
 )
 
 func TestServerRun(t *testing.T) {
-	s, err := ws.NewServer(9999)
+	const PORT = 9000
+
+	s, err := ws.NewServer(PORT)
 	if err != nil {
 		t.Errorf("exp nil, got %q\n", err)
 		return
@@ -21,7 +24,7 @@ func TestServerRun(t *testing.T) {
 
 	defer cancel()
 
-	conn, err := net.Dial("tcp", ":9999")
+	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", PORT))
 	if err != nil {
 		t.Errorf("Dial: exp nil, got %q\n", err)
 		return

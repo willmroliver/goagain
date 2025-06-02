@@ -32,12 +32,16 @@ func (c *ClientConn) Close() (err error) {
 		return err
 	}
 
-	// var f Message
 	err = c.TCPConn.Close()
-	c.open = false
+	c.open = err != nil
 	return
 }
 
+// Handshake sends an HTTP/1.x request to the server to
+// upgrade to a WebSocket connection.
+//
+// On receiving a 101 switch response, server and client
+// can proceed to send messages across the open channel.
 func (c *ClientConn) Handshake() (err error) {
 	if c.open {
 		return

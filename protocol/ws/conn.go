@@ -23,8 +23,11 @@ type Conn struct {
 }
 
 func (c *Conn) Close() error {
-	c.Server.Close(c)
-	CloseFrame.Encode(c)
+	if c.Server != nil && c.open {
+		c.Server.Close(c)
+		CloseFrame.Encode(c)
+	}
+
 	return c.TCPConn.Close()
 }
 
@@ -50,7 +53,9 @@ func (c *Conn) Handshake() (err error) {
 	}
 
 	valid := h.Method == "GET" &&
-		h.Protocol == "HTTP/1.1" &&
+		len(h.Protocol) == 8 &&
+		h.Protocol[:7] == "HTTP/1." &&
+		'1' <= h.Protocol[7] && h.Protocol[7] <= '3' &&
 		(uri == "" || h.URI == uri) &&
 		h.Headers["Upgrade"] == "websocket" &&
 		h.Headers["Connection"] == "Upgrade" &&
@@ -66,11 +71,11 @@ func (c *Conn) Handshake() (err error) {
 	checksum := sha1.Sum([]byte(key + ProtocolGUID))
 
 	h.ParseStatusLine("HTTP/1.1 101 Switching Protocols")
+
 	h.Headers = map[string]string{
-		"Upgrade":    "websocket",
-		"Connection": "Upgrade",
-		"Sec-Websocket-Accept": base64.StdEncoding.
-			EncodeToString(checksum[:]),
+		"Upgrade":              "websocket",
+		"Connection":           "Upgrade",
+		"Sec-Websocket-Accept": base64.StdEncoding.EncodeToString(checksum[:]),
 	}
 
 	err = h.Encode(c)

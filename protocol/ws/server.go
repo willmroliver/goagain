@@ -55,7 +55,9 @@ func (s *Server) Run(ctx context.Context) {
 				continue
 			}
 
-			go conn.Handshake()
+			if err = conn.Handshake(); err != nil {
+				conn.Close()
+			}
 		}
 	}
 }
