@@ -28,14 +28,17 @@ func NewMessage() *Message {
 func (m *Message) Decode(c core.Conn) error {
 	m.Headers = make(map[string]string)
 	m.HeaderParsed = false
+
 	i := -1
 
-	for ; i == -1; i = c.Buf().IndexOf([]byte(DelimHTTP)) {
+	for i == -1 {
 		if c.Buf().Full() {
 			return core.ErrBadHeader
 		}
 
 		c.Buf().Fill()
+
+		i = c.Buf().IndexOf([]byte(DelimHTTP))
 	}
 
 	bytes := make([]byte, i)

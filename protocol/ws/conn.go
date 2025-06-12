@@ -3,6 +3,7 @@ package ws
 import (
 	"crypto/sha1"
 	"encoding/base64"
+	"errors"
 	"net"
 
 	"github.com/willmroliver/wsgo/core"
@@ -52,18 +53,42 @@ func (c *Conn) Handshake() (err error) {
 		uri = s.Conf.Path
 	}
 
-	valid := h.Method == "GET" &&
-		len(h.Protocol) == 8 &&
-		h.Protocol[:7] == "HTTP/1." &&
-		'1' <= h.Protocol[7] && h.Protocol[7] <= '3' &&
-		(uri == "" || h.URI == uri) &&
-		h.Headers["Upgrade"] == "websocket" &&
-		h.Headers["Connection"] == "Upgrade" &&
-		h.Headers["Sec-WebSocket-Version"] == "13" &&
-		len(h.Headers["Sec-WebSocket-Key"]) == 24
+	if h.Method != "GET" {
+		err = errors.New("invalid method, expecting GET")
+		return
+	}
 
-	if !valid {
-		err = core.ErrBadHandshake
+	if len(h.Protocol) != 8 ||
+		h.Protocol[:7] != "HTTP/1." ||
+		h.Protocol[7] < '1' ||
+		h.Protocol[7] > '3' {
+		err = errors.New("invalid protocol, expecting HTTP/1.x")
+		return
+	}
+
+	if uri != "" && h.URI != uri {
+		err = errors.New("invalid URI in header")
+		return
+	}
+
+	if h.Headers["Upgrade"] != "websocket" {
+		err = errors.New(
+			"invalid header 'Upgrade', expecting 'websocket'",
+		)
+		return
+	}
+
+	if h.Headers["Connection"] != "Upgrade" {
+		err = errors.New(
+			"invalid header 'Connection', expecting 'Upgrade'",
+		)
+		return
+	}
+
+	if h.Headers["Sec-WebSocket-Version"] != "13" {
+		err = errors.New(
+			"invalid header 'Sec-WebSocket-Version', expecting '13'",
+		)
 		return
 	}
 
